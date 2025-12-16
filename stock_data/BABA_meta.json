@@ -1,0 +1,10 @@
+{
+  "ticker": "BABA",
+  "last_update": "2025-12-04 22:43:15",
+  "data_points": 2748,
+  "date_range": {
+    "start": "2015-01-02 00:00:00",
+    "end": "2025-12-04 00:00:00"
+  },
+  "custom_name": "阿里巴巴"
+}

@@ -1,0 +1,51 @@
+{
+  "proxy": {
+    "enabled": true,
+    "url": "http://127.0.0.1:7897"
+  },
+  "data": {
+    "directory": "stock_data",
+    "start_date": "2015-01-01"
+  },
+  "watchlist": {
+    "tech_giants": [
+      "AAPL",
+      "MSFT",
+      "GOOGL",
+      "AMZN",
+      "META"
+    ],
+    "ai_chips": [
+      "NVDA",
+      "AMD",
+      "INTC",
+      "QCOM",
+      "AVGO"
+    ],
+    "ev_auto": [
+      "TSLA",
+      "NIO",
+      "XPEV",
+      "LI"
+    ],
+    "chinese_stocks": [
+      "BABA",
+      "BIDU",
+      "JD",
+      "PDD",
+      "BILI"
+    ],
+    "finance": [
+      "JPM",
+      "BAC",
+      "GS",
+      "MS",
+      "C"
+    ],
+    "my_custom": []
+  },
+  "update_schedule": {
+    "auto_update": false,
+    "update_time": "09:30"
+  }
+}
