@@ -2,3 +2,4 @@
 *.idea
 data/
 stock_data/
+__pycache__/
