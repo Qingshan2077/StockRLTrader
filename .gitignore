@@ -1,0 +1,4 @@
+*.log
+*.idea
+data/
+stock_data/
