@@ -1,0 +1,229 @@
+# 分层式量化交易系统 — 开发计划
+
+基于 `开发需求.txt` 的完整规格，构建一个 **单资产、日频** 三层量化交易系统 baseline。
+当前项目处于过渡期：旧系统（Streamlit + XGBoost + PPO 端到端）可运行但不符合分层架构要求；`layers/` 下有目录骨架但导入全部断裂。
+
+目标：产出一个 `python run_backtest.py` 即可执行全流程、输出三组对比指标的可运行原型。
+
+---
+
+## 系统架构（数据流）
+
+原始 OHLCV
+    │
+    ▼
+┌──────────────────────────────────────────────────────┐
+│  Layer 1: 信号层 (LightGBM/MLP)                       │
+│  FeatureEngine → LabelBuilder → SignalPipeline        │
+│  输出: signal_score (未来5日收益率预测值)              │
+└──────────────────────────────────────────────────────┘
+    │ signal_score
+    ▼
+┌──────────────────────────────────────────────────────┐
+│  Layer 2: 风险与约束层                                 │
+│  RiskManager.compute_target_position()                │
+│  7道约束 → 输出: target_position_after_risk ∈ [-1,1]  │
+└──────────────────────────────────────────────────────┘
+    │ target_position
+    ▼
+┌──────────────────────────────────────────────────────┐
+│  Layer 3: RL 执行优化层                                │
+│  ExecutionEnv (Gymnasium) → PPO → execution_ratio     │
+│  executed = current + ratio * (target - current)       │
+└──────────────────────────────────────────────────────┘
+    │
+    ▼
+┌──────────────────────────────────────────────────────┐
+│  BacktestEngine: 三组对比                              │
+│  模式1: 纯信号  模式2: 信号+风控  模式3: 全三层        │
+└──────────────────────────────────────────────────────┘
+
+三层职责分明：
+- 监督学习负责"找机会"（预测未来收益方向）
+- 传统量化负责"设边界"（仓位限制、止损、波动率降仓）
+- RL 负责"优化执行行为"（调仓节奏，不接触原始 K 线）
+
+---
+
+## Phase 0: 修复断裂的导入 + 基础配置 (4 个文件)
+
+### 0.1 修改 `layers/__init__.py`
+移除对不存在模块的导入，改为延迟导入（各模块实现后再注册）。
+
+### 0.2 创建 `config/settings.py`
+集中管理所有可配置参数（随机种子、路径、模型超参、风控参数、RL 参数）。
+
+### 0.3 创建 `utils/logger.py`
+统一日志模块，输出到 `logs/` 目录，按日期分割。
+
+### 0.4 创建 `utils/helpers.py`
+共享工具函数：set_seed、compute_drawdown、annualized_sharpe 等。
+
+---
+
+## Phase 1: 特征工程模块 (2 个文件)
+
+### 1.1 创建 `layers/features/feature_engine.py`
+核心类 FeatureEngine —— 严格时间滚动特征工程，绝对无未来函数泄露。
+
+必须计算的特征:
+  收益率: ret_1d, ret_5d, ret_10d, ret_20d
+  波动率: vol_5d, vol_10d, vol_20d (rolling std * sqrt(252))
+  均线偏离: dist_sma_10, dist_sma_20, dist_sma_50 (Close / SMA - 1)
+  动量: RSI_14, RSI_28
+  动量: MACD, MACD_signal, MACD_hist (12,26,9)
+  成交量: vol_ratio_20 (Volume / SMA_Volume_20)
+  趋势: trend_strength ((SMA_10 - SMA_50) / SMA_50)
+  布林带: bb_width, bb_position
+  回撤: dd_20d (20日滚动最大回撤)
+  市场: beta_60d (相对于基准的 60 日 Beta)
+
+关键防泄漏措施：所有 rolling 操作使用 .shift(1) 确保只用历史数据。
+
+### 1.2 创建 `layers/features/label_builder.py`
+LabelBuilder —— 构造未来 N 日收益率标签，严格防泄露。
+
+---
+
+## Phase 2: 信号层 (3 个文件)
+
+### 2.1-2.2 创建 signal_pipeline.py
+SignalPipeline —— 训练信号模型并输出 signal_score。
+- LightGBM baseline: 回归预测 fwd_return_5d
+- 输出标准化: signal_score = tanh(prediction / threshold) 映射到 (-1, 1)
+- StandardScaler 仅在训练集拟合
+
+### 2.3 创建 mlp_model.py
+MLPSignalModel —— PyTorch MLP 作为信号模型备选。
+3层全连接: input_dim → 128 → 64 → 1, BatchNorm + Dropout + ReLU
+
+---
+
+## Phase 3: 风险与约束层 (1 个文件)
+
+### 3.1-3.2 创建 risk_manager.py
+RiskManager —— 信号 → 目标仓位映射。无状态，7 道约束顺序执行。
+
+7 道约束流水线:
+1. _signal_to_raw_position(signal_score) — 信号映射为原始目标仓位
+2. _apply_position_limits(raw) — 总仓位上限 + 单资产上限裁剪
+3. _check_stop_loss(current_position, pnl) — 固定止损 5%
+4. _volatility_reduction(target, current_vol) — 波动率过高降仓
+5. _apply_turnover_limit(target, current_position, prev_turnover) — 最大换手率
+6. _liquidity_filter(target, avg_daily_volume, portfolio_value) — 流动性过滤
+7. _estimate_transaction_cost(target, current_position, price, volume) — 手续费 + 滑点估算
+
+---
+
+## Phase 4: RL 执行优化层 (2 个文件)
+
+### 4.1-4.2 创建 execution_env.py
+ExecutionEnv —— 本项目最关键的新模块。
+
+与旧 rl_trading_env.py 的关键区别:
+  旧: 输入原始 OHLCV + 技术指标, 动作 Discrete(3), RL 做预测+执行决策
+  新: 输入 signal_score + target_position, 动作 Continuous(1) ∈ [0,1], RL 只做执行节奏优化
+
+状态空间 (41维):
+  - signal_score, target_position, current_position, unrealized_pnl
+  - recent_volatility_5d/20d, recent_drawdown, estimated_cost
+  - recent_rebalance_count, market_regime_features (5)
+  - position_history_5d, signal_history_5d, target_history_5d, execution_history_5d
+  - 其他辅助特征
+
+奖励: portfolio_return - λ1*cost - λ2*turnover - λ3*max(0, drawdown - threshold)
+
+### 4.3-4.4 创建 rl_executor.py
+RLExecutor —— 训练/加载 RL 执行优化器 (PPO/A2C)。
+
+---
+
+## Phase 5: 回测引擎 (2 个文件)
+
+### 5.1-5.2 创建 metrics.py
+MetricsCalculator —— 从 NAV 序列计算全部回测指标。
+(年化收益/波动率/夏普/Sortino/最大回撤/Calmar/胜率/换手率等)
+
+### 5.3 创建 backtest_engine.py
+BacktestEngine —— 支持三种模式的回测引擎:
+  - mode='signal_only': 直接按 signal_score 映射仓位
+  - mode='signal_risk': signal_score → RiskManager → 仓位
+  - mode='full': signal_score → RiskManager → RL executor → 仓位
+
+---
+
+## Phase 6: 训练脚本 (2 个文件)
+
+### 6.1 创建 train_signal.py
+阶段1: 训练信号模型 → 输出 signal_score 到测试集 → 保存模型
+
+### 6.2 创建 train_rl.py
+阶段3: 加载 signal_score → RiskManager 生成 target_position → 训练 PPO → 保存模型
+
+---
+
+## Phase 7: 入口脚本 (1 个文件)
+
+### 7.1 创建 run_backtest.py
+全流程入口: 加载数据 → 信号模型 → RL → 三组回测对比 → 输出对比表格
+
+---
+
+## 文件清单（25 个文件）
+
+新建/修改的文件:
+  layers/__init__.py                          [修改] 修复断裂导入
+  layers/data/__init__.py                     [保留] 已有
+  layers/data/data_loader.py                  [保留] 已有，可工作
+  layers/features/__init__.py                 [修改] 注册 FeatureEngine
+  layers/features/feature_engine.py           [新建] 核心特征工程
+  layers/features/label_builder.py            [新建] 标签构造
+  layers/models/__init__.py                   [新建]
+  layers/models/signal/__init__.py            [新建]
+  layers/models/signal/signal_pipeline.py     [新建] 信号模型训练/预测
+  layers/models/signal/mlp_model.py           [新建] MLP 备选模型
+  layers/models/risk/__init__.py              [新建]
+  layers/models/risk/risk_manager.py          [新建] 7道约束风控
+  layers/models/rl/__init__.py                [新建]
+  layers/models/rl/rl_executor.py             [新建] RL 训练/推理
+  layers/env/__init__.py                      [新建]
+  layers/env/execution_env.py                 [新建] Gymnasium 环境
+  layers/evaluation/__init__.py               [新建]
+  layers/evaluation/metrics.py                [新建] 指标计算
+  layers/backtest/__init__.py                 [新建]
+  layers/backtest/backtest_engine.py          [新建] 三种模式回测
+  config/__init__.py                          [新建]
+  config/settings.py                          [新建] 集中配置
+  utils/__init__.py                           [新建]
+  utils/logger.py                             [新建] 统一日志
+  utils/helpers.py                            [新建] 共享工具
+  train_signal.py                             [新建] 阶段1训练脚本
+  train_rl.py                                 [新建] 阶段3训练脚本
+  run_backtest.py                             [新建] 全流程入口
+
+---
+
+## 验证方案
+
+冒烟测试（每个 Phase 完成后）:
+1. FeatureEngine 输出无 NaN 值，列数 >= 25
+2. LabelBuilder 标签数量 = 原始数据行数 - horizon
+3. SignalPipeline 在验证集上 R² > 0
+4. RiskManager 对极端信号输出合理的目标仓位
+5. ExecutionEnv 可通过 check_env() 验证
+6. BacktestEngine 三组模式下均不崩溃
+
+端到端验证:
+  python run_backtest.py --ticker AAPL
+  期望: 全三层系统夏普更高、回撤更小、换手更少
+
+---
+
+## 风险与缓解
+
+| 风险                               | 等级 | 缓解                                       |
+| yfinance API 不稳定导致数据下载失败 | 中   | 使用本地 CSV 缓存                          |
+| pandas_ta 列名随版本变化            | 中   | 动态列名匹配                               |
+| stable-baselines3 版本兼容          | 低   | 锁定 >=2.0.0                               |
+| RL 训练时间过长                     | 低   | 单资产日频，100K 步约 5 分钟               |
+| 现有 layers/__init__.py 导入断裂    | 低   | Phase 0 第一步修复                         |

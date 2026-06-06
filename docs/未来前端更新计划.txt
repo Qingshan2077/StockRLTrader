@@ -1,0 +1,225 @@
+================================================================================
+  未来前端更新计划 — Streamlit → 纯 HTML/CSS/JS 前端迁移方案
+  参考样式: 股息投资计算器.html (暗黑交易终端美学)
+  日期: 2026-05-13
+================================================================================
+
+一、核心结论
+────────────────────────────────────────────────────────
+Streamlit 无法 100% 复现参考样式的以下特性:
+  - CSS 伪元素 (::before/::after 网格背景、光晕)
+  - @keyframes 动画
+  - 自定义输入框样式 (数字箭头隐藏、等宽字体)
+  - 按钮滑入填充动效
+  - 精确的字体加载控制
+
+必须将前端从 Streamlit 迁移到自建 Web 前端。
+最务实的路线: FastAPI + 纯 HTML/CSS/JS，后端业务逻辑大量复用。
+
+二、架构变更
+────────────────────────────────────────────────────────
+当前:  Streamlit (单体, Python 渲染 UI)
+目标:  纯 HTML/CSS/JS 前端 ←HTTP/WS→ FastAPI 后端 → 业务逻辑(layers/)
+
+不需要改的部分 (约 60% 代码可直接复用):
+  - layers/signals/        — 7 个模型全部不变
+  - layers/features/       — 特征工程不变
+  - layers/evaluation/     — 评估器不变
+  - layers/risk/           — 风控引擎不变
+  - layers/backtest/       — 回测引擎不变
+  - layers/ensemble/       — 模型融合不变
+  - improved_data_engine.py — 数据引擎不变
+  - config/                — 所有配置文件不变
+
+需要新建的部分:
+  - FastAPI 后端 (约 40 个 API 端点)
+  - 12 个 HTML 页面 + 共享组件库
+  - WebSocket 实时通道 (训练进度推送)
+
+三、逐页功能点与改造量
+────────────────────────────────────────────────────────
+页面                    交互组件        图表数  改造难点              估时
+────────────────────────────────────────────────────────
+app.py 主页              8(选择器/按钮)   3      K线图用Plotly.js重写   1.5天
+1_数据管理.py            15(5Tab多表单)   0      批量操作的状态管理      1天
+2_预测分析.py            5               3      置信区间绑定            1天
+3_AI交易.py              12(5Tab)        4      已删除,由9_交易执行.py替代    --
+4_系统设置.py            0               0      纯静态,最简单           0.5天
+5_短线交易.py            6               2      交易明细表+下载         1天
+6_模型训练.py            8               2      多模型并行训练进度      1.5天
+7_信号评估.py            4               3      统计指标展示            1天
+8_风控系统.py            7(5滑块)        2      三组回测对比逻辑        1天
+9_交易执行.py            8(4权重滑块)    1      RL训练WebSocket        1.5天
+10_实验管理.py           3               2      SQLite数据读取          0.5天
+11_全流程管线.py         5               0      多步骤进度推送          1天
+────────────────────────────────────────────────────────
+合计                                                   13天
+
+四、新建 API 端点清单 (约 40 个)
+────────────────────────────────────────────────────────
+
+[数据管理 8]
+  GET    /api/stocks                    — 可用股票列表
+  POST   /api/stocks/download           — 下载单只股票
+  POST   /api/stocks/download/batch     — 批量下载
+  GET    /api/stocks/{ticker}/info      — 股票元数据
+  GET    /api/stocks/{ticker}/data      — OHLCV 数据
+  PUT    /api/stocks/{ticker}/name      — 设置自定义名称
+  DELETE /api/stocks/{ticker}           — 删除数据
+  POST   /api/stocks/update/all         — 更新所有股票
+
+[模型训练 6]
+  POST   /api/models/train              — 训练模型 (async)
+  POST   /api/models/train/all          — 训练全部模型 (async)
+  GET    /api/models/list               — 已训练模型列表
+  GET    /api/models/{name}/metrics     — 模型指标
+  DELETE /api/models/{name}            — 清除模型
+  POST   /api/models/ensemble           — 构建集成模型
+
+[预测与评估 5]
+  POST   /api/predict/trend             — 趋势预测
+  POST   /api/predict/price             — 价格预测 (含置信区间)
+  POST   /api/evaluate/ic               — IC/RankIC 评估
+  POST   /api/evaluate/quantile         — 分位数分析
+  POST   /api/evaluate/full             — 完整评估报告
+
+[交易与回测 6]
+  POST   /api/backtest/macd             — MACD 策略回测
+  POST   /api/backtest/risk             — 风控回测对比
+  POST   /api/rl/train                  — RL 训练 (async + WS)
+  GET    /api/rl/models                 — RL 模型列表
+  POST   /api/rl/signal                 — 获取交易信号
+  GET    /api/rl/{model}/load           — 加载 RL 模型
+
+[实验管理 4]
+  GET    /api/experiments               — 实验列表
+  GET    /api/experiments/{id}          — 实验详情
+  POST   /api/experiments               — 创建实验
+  PUT    /api/experiments/{id}          — 更新实验
+
+[系统 3]
+  GET    /api/config                    — 系统配置
+  GET    /api/system/status             — 系统状态
+  WS     /ws/progress/{task_id}         — 实时进度推送
+
+五、前端组件库
+────────────────────────────────────────────────────────
+共享组件 (约 1500 行):
+  - 导航栏 (sidebar)           — 股票列表 + 页面切换
+  - 股票选择器                  — 下拉搜索 + 自定义名称
+  - 参数滑块                    — 范围滑块 + 数值显示
+  - 数字输入框                  — 等宽字体 + 单位后缀
+  - 操作按钮                    — 金色边框 + 滑入填充动效
+  - 指标卡片 (metric_tile)     — 左侧色带 + 深色面板
+  - 数据表格                    — 暗色 + 等宽字体 + 排序
+  - 标签页 (Tabs)              — 金色下划线激活态
+  - 进度条                      — 金色渐变 + 百分比
+  - 状态徽章 (status_badge)    — 彩色标签
+  - 空状态引导 (empty_state)   — 居中提示
+  - 区域标题 (section_header)  — 金色文字 + 底部虚线
+  - 确认对话框                  — 删除/危险操作确认
+  - Toast 通知                  — 成功/错误/警告提示
+
+六、总工作量估算
+────────────────────────────────────────────────────────
+模块                  代码量        人天
+────────────────────────────────────────────────────────
+FastAPI 后端           ~2500 行      5 天
+共享前端组件           ~1500 行      3 天
+12 个页面              ~6000 行      13 天
+Plotly.js 图表         ~800 行       2 天
+WebSocket 实时通道     ~500 行       2 天
+样式打磨               ~500 行 CSS   2 天
+联调测试               —             3 天
+────────────────────────────────────────────────────────
+总计                   ~12000 行     约 30 人天
+
+七、风险与技术难点
+────────────────────────────────────────────────────────
+难点                      说明                                    缓解方案
+────────────────────────────────────────────────────────
+训练进度实时推送           RL 和模型训练可能持续数分钟              WebSocket + 进度百分比回调
+Plotly 图表迁移            Streamlit 自动处理大小/主题              Plotly.js 手动配置 dark template
+Session 状态管理           st.session_state 在纯前端需要重建         前端全局状态对象 + localStorage
+大数据传输                 股票数据可能数万行                        分页 + 后端聚合 + 只传需要的数据
+K 线图                     Plotly.js Candlestick 需要特定格式        与 Python 版格式一致，直接映射
+
+八、推荐执行路线 (渐进式, 4 阶段)
+────────────────────────────────────────────────────────
+
+[第一阶段: 基础骨架] (5 天)
+  1. 搭建 FastAPI 项目结构 + CORS + 错误处理
+  2. 创建前端 HTML 模板 + 共享组件库 (导航栏/选择器/按钮/卡片/表格)
+  3. 实现主页 (app.py → index.html)
+     - 股票选择器 + 数据加载
+     - K线图 (Plotly.js) + 成交量
+     - 指标卡片 (价格/成交量/RSI/AI预测)
+     - 技术分析图表 (RSI/MACD)
+  4. WebSocket 基础设施
+
+[第二阶段: 数据与预测] (5 天)
+  5. 数据管理页面 (1_数据管理.py)
+  6. 预测分析页面 (2_预测分析.py)
+  7. 系统设置页面 (4_系统设置.py)
+
+[第三阶段: 核心量化] (10 天)
+  8. 模型训练页面 (6_模型训练.py) + 多模型并行训练进度
+  9. 信号评估页面 (7_信号评估.py)
+  10. 风控系统页面 (8_风控系统.py)
+  11. 交易执行页面 (9_交易执行.py) + RL 训练 WebSocket
+
+[第四阶段: 交易与实验] (10 天)
+  12. RL交易页面 (9_交易执行.py) — 替代原 3_AI交易.py
+  13. 短线交易页面 (5_短线交易.py)
+  14. 实验管理页面 (10_实验管理.py)
+  15. 全流程管线页面 (11_全流程管线.py)
+  16. 全面联调 + 样式打磨 + 响应式适配
+
+九、项目文件结构规划
+────────────────────────────────────────────────────────
+StockTrader/
+├── backend/                     # 新建: FastAPI 后端
+│   ├── main.py                  # FastAPI 入口 + 路由注册
+│   ├── api/                     # API 路由
+│   │   ├── stocks.py            # 数据管理端点
+│   │   ├── models.py            # 模型训练端点
+│   │   ├── predict.py           # 预测端点
+│   │   ├── evaluate.py          # 评估端点
+│   │   ├── backtest.py          # 回测端点
+│   │   ├── rl.py                # RL 端点
+│   │   ├── experiments.py       # 实验管理端点
+│   │   └── ws.py                # WebSocket 端点
+│   └── schemas.py               # Pydantic 请求/响应模型
+│
+├── frontend/                    # 重建: 纯 HTML/CSS/JS
+│   ├── index.html               # 主页
+│   ├── pages/                   # 功能页面
+│   │   ├── data.html            # 数据管理
+│   │   ├── predict.html         # 预测分析
+│   │   ├── trading.html         # AI交易
+│   │   ├── settings.html        # 系统设置
+│   │   ├── short-term.html      # 短线交易
+│   │   ├── train.html           # 模型训练
+│   │   ├── signal.html          # 信号评估
+│   │   ├── risk.html            # 风控系统
+│   │   ├── execute.html         # 交易执行
+│   │   ├── experiments.html     # 实验管理
+│   │   └── pipeline.html        # 全流程管线
+│   ├── css/
+│   │   └── theme.css            # 全局主题样式
+│   ├── js/
+│   │   ├── api.js               # API 调用封装
+│   │   ├── components.js        # 共享 UI 组件
+│   │   ├── charts.js            # Plotly.js 图表工厂
+│   │   ├── ws.js                # WebSocket 客户端
+│   │   └── state.js             # 前端状态管理
+│   └── assets/                  # 静态资源
+│
+├── layers/                      # 不变: 业务逻辑
+├── stock_data/                  # 不变: 数据存储
+├── config/                      # 不变: 配置文件
+└── models/                      # 不变: 模型文件
+
+================================================================================
+  注: 当前 Streamlit 版本的前端文件保留在 frontend_streamlit/ 作为备份
+================================================================================

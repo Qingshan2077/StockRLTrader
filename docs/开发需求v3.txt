@@ -1,0 +1,671 @@
+高复杂度 AI 量化交易系统开发需求文档（机构化版本）
+
+你要实现的不是一个“简单策略脚本”，而是一个具备：
+
+多层 AI 决策架构
+传统量化风控体系
+RL 执行优化
+可扩展研究框架
+可回测
+可多资产扩展
+可在线推理
+可逐步演进到实盘
+
+的完整量化研究平台。
+
+该系统目标是模拟真实量化私募 / hedge fund / AI trading lab 的研究架构，而不是 Kaggle 风格单模型预测器。
+
+系统核心思想：
+
+监督学习负责 Alpha Discovery（发现 alpha）
+传统量化负责 Portfolio Construction & Risk Control（组合构建与风险控制）
+强化学习负责 Execution Optimization（执行优化）
+整体系统必须采用模块化、多层解耦设计
+
+严禁做成：
+
+一个 end-to-end RL 黑盒
+一个简单 sklearn 回归脚本
+一个只有 buy/sell 的玩具系统
+
+系统必须具备工程化、研究化、可演进性。
+
+一、系统总体架构
+
+系统必须采用以下分层：
+
+Market Data Layer
+        ↓
+Feature Engineering Layer
+        ↓
+Alpha Signal Layer（监督学习/深度学习）
+        ↓
+Signal Ensemble Layer（多模型融合）
+        ↓
+Portfolio Construction Layer
+        ↓
+Risk & Constraint Layer
+        ↓
+RL Execution Optimization Layer
+        ↓
+Backtest / Simulation Engine
+        ↓
+Evaluation & Attribution Layer
+        ↓
+Online Inference / Live Trading Interface
+
+必须严格模块化。
+
+每层：
+
+有明确输入输出
+有独立配置
+有单独日志
+有独立测试能力
+可单独替换
+
+不能写成巨型 monolithic class。
+
+二、系统目标
+
+系统目标不是：
+
+“预测涨跌”
+
+而是：
+
+构建完整的：
+
+alpha 生成
+alpha 融合
+风险约束
+组合构建
+执行优化
+回测分析
+
+全流程智能量化系统。
+
+三、核心设计思想（必须贯彻）
+1）Alpha 与 Execution 解耦
+
+RL 不负责发现 alpha。
+
+监督学习负责：
+
+市场模式识别
+收益预测
+regime 判断
+alpha ranking
+
+RL 负责：
+
+降低冲击成本
+调仓路径优化
+仓位动态控制
+延迟执行决策
+减少无效换手
+
+这是整个系统最关键的思想。
+
+2）风险控制不能交给 RL 自学
+
+风险控制必须是：
+
+显式
+可解释
+可审计
+可配置
+
+风险层必须独立存在。
+
+包括：
+
+仓位约束
+波动率约束
+回撤约束
+流动性约束
+行业暴露约束
+杠杆约束
+成本建模
+3）系统必须具备“研究平台”能力
+
+系统不是一个策略文件。
+
+必须支持：
+
+多模型实验
+多因子实验
+多 reward 实验
+walk-forward 回测
+超参数搜索
+多版本管理
+实验结果记录
+
+类似：
+
+Quant Research Platform
+RL Trading Research Framework
+四、数据系统要求
+4.1 数据层设计
+
+必须设计统一数据接口：
+
+class MarketDataProvider:
+
+支持：
+
+市场数据
+OHLCV
+VWAP
+turnover
+amount
+benchmark
+index data
+高频扩展预留
+
+未来可扩展：
+
+tick
+orderbook
+microstructure
+因子扩展
+
+未来支持：
+
+fundamentals
+sentiment
+macro
+alternative data
+4.2 数据存储
+
+支持：
+
+parquet
+feather
+csv
+
+必须：
+
+缓存
+lazy loading
+memory optimization
+
+未来预留：
+
+DuckDB
+ClickHouse
+4.3 数据切分
+
+必须支持：
+
+时间序列切分
+train
+validation
+test
+walk-forward
+
+例如：
+
+train: 2015-2018
+val:   2019
+test:  2020
+
+rolling forward...
+
+严禁随机 shuffle。
+
+五、Feature Engineering 系统
+
+必须设计独立特征工程引擎：
+
+class FeaturePipeline:
+
+支持：
+
+自动特征注册
+因子缓存
+特征版本管理
+rolling window
+cross-sectional feature
+time-series feature
+5.1 技术指标特征
+
+至少实现：
+
+收益率
+1d
+5d
+10d
+20d
+log return
+波动率
+rolling std
+ATR
+realized volatility
+趋势
+MA
+EMA
+MA distance
+MACD
+动量
+RSI
+momentum
+stochastic oscillator
+成交量
+volume ratio
+OBV
+turnover change
+风险
+beta
+rolling drawdown
+downside volatility
+5.2 高级特征预留
+
+预留接口：
+
+Transformer embedding
+AutoEncoder latent factor
+regime embedding
+market graph feature
+六、Alpha Signal Layer（核心）
+
+这是系统最重要的一层之一。
+
+必须设计成完整研究框架。
+
+6.1 模型架构
+
+至少支持：
+
+传统模型
+Linear
+Ridge
+Lasso
+XGBoost
+LightGBM
+深度学习
+MLP
+LSTM
+GRU
+Temporal CNN
+Transformer
+6.2 输出类型
+
+支持：
+
+return regression
+classification
+ranking score
+
+输出：
+
+signal_score
+signal_confidence
+6.3 标签系统
+
+支持：
+
+回归
+
+未来 N 日收益
+
+分类
+
+上涨 / 下跌 / 震荡
+
+排序
+
+cross-sectional ranking
+
+6.4 Ensemble 系统（必须）
+
+不能只支持单模型。
+
+必须实现：
+
+class SignalEnsemble:
+
+支持：
+
+weighted average
+stacking
+voting
+regime switching ensemble
+6.5 Alpha Evaluation
+
+必须实现：
+
+IC
+RankIC
+IC decay
+signal turnover
+factor correlation
+feature importance
+SHAP analysis
+七、Portfolio Construction Layer
+
+这一层不能省略。
+
+必须显式实现：
+
+class PortfolioConstructor:
+
+作用：
+
+signal → portfolio weight
+7.1 权重生成方法
+
+至少支持：
+
+简单映射
+sigmoid
+zscore normalization
+优化方法
+mean variance
+risk parity
+minimum variance
+
+未来预留：
+
+Black-Litterman
+八、Risk & Constraint Layer（机构级）
+
+必须独立模块化。
+
+8.1 风险约束
+
+至少支持：
+
+仓位约束
+max gross exposure
+max net exposure
+max single asset weight
+波动率约束
+target volatility
+vol scaling
+回撤控制
+dynamic deleverage
+circuit breaker
+流动性约束
+ADV limit
+minimum volume
+行业约束
+
+未来多资产预留：
+
+sector exposure
+factor neutrality
+8.2 成本建模（必须真实）
+
+不能只写固定手续费。
+
+至少支持：
+
+显式成本
+commission
+tax
+隐式成本
+slippage
+market impact
+
+例如：
+
+impact_cost ~ k * sqrt(order_size / ADV)
+九、RL Execution Layer（系统灵魂）
+
+这是最关键部分。
+
+RL 不负责 alpha discovery。
+
+RL 负责：
+
+execution scheduling
+dynamic rebalancing
+turnover optimization
+cost-aware adjustment
+9.1 RL 环境
+
+必须基于：
+
+gymnasium.Env
+9.2 状态空间
+
+至少包括：
+
+市场状态
+volatility
+trend
+liquidity
+regime
+组合状态
+current position
+target position
+unrealized pnl
+drawdown
+执行状态
+turnover
+transaction cost
+recent actions
+9.3 动作空间
+
+连续动作：
+
+execution_ratio ∈ [0,1]
+
+或：
+
+delta_position ∈ [-1,1]
+9.4 Reward（重点）
+
+奖励必须是多目标：
+
+reward =
+    pnl
+    - λ1 * transaction_cost
+    - λ2 * turnover
+    - λ3 * drawdown
+    - λ4 * volatility
+
+必须支持：
+
+configurable reward
+reward ablation
+9.5 RL 算法
+
+至少支持：
+
+PPO
+SAC
+
+预留：
+
+offline RL
+hierarchical RL
+multi-agent RL
+十、Backtest Engine（不能简化）
+
+必须实现事件驱动回测系统。
+
+不能只是：
+
+position.shift(1)
+10.1 回测功能
+
+支持：
+
+order generation
+partial fill
+slippage
+delayed execution
+stop loss
+portfolio accounting
+leverage
+margin
+10.2 回测模式
+
+支持：
+
+bar-based
+
+日频
+
+未来预留：
+
+event-driven
+
+分钟级
+
+十一、Evaluation & Attribution
+
+必须实现：
+
+Performance Metrics
+Sharpe
+Sortino
+Calmar
+Max Drawdown
+CAGR
+Win Rate
+Attribution
+alpha contribution
+cost attribution
+turnover attribution
+risk attribution
+十二、实验系统（必须）
+
+必须实现：
+
+class ExperimentManager:
+
+支持：
+
+config versioning
+result tracking
+model checkpoint
+hyperparameter logging
+
+类似：
+
+MLflow
+Weights & Biases
+
+但可先简化实现。
+
+十三、配置系统
+
+必须统一 YAML 配置：
+
+model:
+risk:
+rl:
+backtest:
+data:
+
+禁止硬编码参数。
+
+十四、日志系统
+
+必须支持：
+
+training log
+backtest log
+execution log
+risk event log
+十五、项目结构（必须工程化）
+project/
+│
+├── config/
+├── data/
+├── datasets/
+├── features/
+├── signals/
+├── ensemble/
+├── portfolio/
+├── risk/
+├── rl/
+├── env/
+├── backtest/
+├── evaluation/
+├── experiments/
+├── utils/
+├── notebooks/
+├── train_signal.py
+├── train_rl.py
+├── run_backtest.py
+└── run_pipeline.py
+十六、开发阶段（必须分阶段）
+Phase 1
+
+单资产 baseline
+
+Phase 2
+
+多资产组合
+
+Phase 3
+
+组合优化器
+
+Phase 4
+
+分钟级数据
+
+Phase 5
+
+online inference
+
+Phase 6
+
+paper trading
+
+十七、系统必须体现的机构化思想
+
+必须体现：
+
+不是单模型
+
+而是：
+signal stack + risk engine + execution optimizer
+
+不是预测准确率游戏
+
+而是：
+risk-adjusted return optimization
+
+不是 RL 学一切
+
+而是：
+RL 只优化 execution behavior
+
+十八、禁止事项
+
+严禁：
+
+end-to-end RL directly from OHLCV
+random shuffle split
+ignoring transaction cost
+giant god class
+toy backtest
+no risk module
+no attribution
+no experiment management
+十九、最终输出要求
+
+你最终必须输出：
+
+完整系统架构
+模块职责说明
+工程目录结构
+核心类设计
+关键代码骨架
+配置文件示例
+RL 环境实现
+回测引擎设计
+baseline 策略
+训练流程
+实验管理方案
+后续扩展路线
+
+输出标准必须达到：
+
+“可以直接开始搭建真实研究系统”的程度，而不是教程级 demo。

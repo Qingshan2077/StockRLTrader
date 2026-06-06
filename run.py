@@ -20,28 +20,28 @@ def check_python_version():
     return True
 
 
-def check_dependencies():
-    """检查依赖是否安装"""
-    required_packages = {
-        'streamlit': 'streamlit',
-        'pandas': 'pandas',
-        'yfinance': 'yfinance',
-        'pandas_ta': 'pandas-ta',
-        'xgboost': 'xgboost',
-        'sklearn': 'scikit-learn',
-        'plotly': 'plotly'
-    }
-
-    missing = []
-    for module, package in required_packages.items():
-        try:
-            __import__(module)
-            print(f"✅ {package}")
-        except ImportError:
-            print(f"❌ {package} (未安装)")
-            missing.append(package)
-
-    return missing
+# def check_dependencies():
+#     """检查依赖是否安装"""
+#     required_packages = {
+#         'streamlit': 'streamlit',
+#         'pandas': 'pandas',
+#         'yfinance': 'yfinance',
+#         'pandas_ta': 'pandas-ta',
+#         'xgboost': 'xgboost',
+#         'sklearn': 'scikit-learn',
+#         'plotly': 'plotly'
+#     }
+#
+#     missing = []
+#     for module, package in required_packages.items():
+#         try:
+#             __import__(module)
+#             print(f"✅ {package}")
+#         except ImportError:
+#             print(f"❌ {package} (未安装)")
+#             missing.append(package)
+#
+#     return missing
 
 
 def install_dependencies(packages):
@@ -166,20 +166,20 @@ def main():
         return
 
     # 2. 检查依赖
-    print("\n[2/5] 检查依赖...")
-    missing = check_dependencies()
+    # print("\n[2/5] 检查依赖...")
+    # missing = check_dependencies()
 
-    if missing:
-        print(f"\n发现 {len(missing)} 个缺失的依赖包")
-        install = input("是否自动安装? (y/n): ").strip().lower()
-
-        if install == 'y':
-            if not install_dependencies(missing):
-                return
-        else:
-            print("\n请手动安装依赖:")
-            print(f"pip install {' '.join(missing)}")
-            return
+    # if missing:
+    #     print(f"\n发现 {len(missing)} 个缺失的依赖包")
+    #     install = input("是否自动安装? (y/n): ").strip().lower()
+    #
+    #     if install == 'y':
+    #         if not install_dependencies(missing):
+    #             return
+    #     else:
+    #         print("\n请手动安装依赖:")
+    #         print(f"pip install {' '.join(missing)}")
+    #         return
 
     # 3. 检查项目结构
     print("\n[3/5] 检查项目结构...")

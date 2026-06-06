@@ -1,0 +1,105 @@
+# ===========================
+# Alpha 模型配置
+# ===========================
+
+# 当前使用的模型列表
+active_models:
+  - "lightgbm"
+  # - "xgboost"
+  # - "ridge"
+  # - "mlp"
+  # - "lstm"
+
+# 标签配置
+label:
+  type: "regression"          # regression | classification | ranking
+  horizons: [5]                # 预测天数, 可多个
+  classification_threshold: 0.005  # 分类模式的涨跌阈值
+
+# LightGBM
+lightgbm:
+  n_estimators: 200
+  learning_rate: 0.05
+  max_depth: 6
+  num_leaves: 31
+  min_child_samples: 20
+  subsample: 0.8
+  colsample_bytree: 0.8
+  reg_alpha: 0.1
+  reg_lambda: 0.1
+
+# XGBoost
+xgboost:
+  n_estimators: 200
+  learning_rate: 0.05
+  max_depth: 5
+  subsample: 0.8
+  colsample_bytree: 0.8
+  reg_alpha: 0.1
+  reg_lambda: 0.1
+
+# Ridge
+ridge:
+  alpha: 1.0
+
+# Lasso
+lasso:
+  alpha: 0.001
+
+# MLP
+mlp:
+  hidden_dims: [128, 64]
+  dropout: 0.3
+  learning_rate: 0.001
+  batch_size: 64
+  epochs: 100
+  patience: 15
+
+# LSTM
+lstm:
+  hidden_size: 64
+  num_layers: 2
+  dropout: 0.3
+  learning_rate: 0.001
+  batch_size: 64
+  epochs: 100
+  patience: 15
+  sequence_length: 20
+
+# GRU
+gru:
+  hidden_size: 64
+  num_layers: 2
+  dropout: 0.3
+  learning_rate: 0.001
+  batch_size: 64
+  epochs: 100
+
+# TCN
+tcn:
+  num_channels: [64, 64, 64]
+  kernel_size: 3
+  dropout: 0.3
+  learning_rate: 0.001
+
+# Transformer
+transformer:
+  d_model: 64
+  nhead: 4
+  num_layers: 2
+  dim_feedforward: 128
+  dropout: 0.3
+  learning_rate: 0.001
+  sequence_length: 20
+
+# Ensemble
+ensemble:
+  method: "weighted"           # weighted | stacking | voting | regime
+  stacking_meta_model: "ridge"
+  regime_switch_threshold: 0.3
+
+# 数据切分 (时序, 禁止随机打乱)
+data_split:
+  train_ratio: 0.6
+  val_ratio: 0.2
+  # test = 1 - train - val

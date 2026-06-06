@@ -21,38 +21,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 自定义CSS
-st.markdown("""
-<style>
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin-bottom: 2rem;
-    }
-    .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 20px;
-        border-radius: 10px;
-        color: white;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-    .stButton>button {
-        width: 100%;
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        padding: 0.5rem 1rem;
-        border-radius: 5px;
-        font-weight: 600;
-    }
-    .stButton>button:hover {
-        box-shadow: 0 4px 12px rgba(102,126,234,0.4);
-    }
-</style>
-""", unsafe_allow_html=True)
+# 自定义CSS — Trading Terminal Noir
+from frontend.v3_utils import apply_theme, metric_tile, section_header
+apply_theme()
 
 # 初始化 session state
 if 'data_engine' not in st.session_state:
@@ -178,7 +149,7 @@ with st.sidebar:
         st.markdown(f"**数据点数:** {len(st.session_state.data)}")
 
 # 主页面
-st.markdown('<div class="main-header">📈 AI股票交易助手</div>', unsafe_allow_html=True)
+st.markdown('<h1 style="font-family:Noto Serif SC,serif;font-weight:600;color:#e8e4d9;border-bottom:1px solid #252a35;padding-bottom:0.6rem"><span style="color:#c9a84c">▸</span> AI 股票交易系统</h1>', unsafe_allow_html=True)
 
 # 顶部指标卡片
 if st.session_state.data is not None and not st.session_state.data.empty:
@@ -352,7 +323,7 @@ if st.session_state.data is not None and not st.session_state.data.empty:
                     marker_color=['green' if p > 0.5 else 'red' for p in prob_list]
                 ))
 
-                fig.add_hline(y=0.5, line_dash="dash", line_color="gray",
+                fig.add_hline(y=0.5, line_dash="dash", line_color="#7a7570",
                               annotation_text="中性线")
 
                 fig.update_layout(
@@ -439,22 +410,25 @@ else:
         st.markdown("- 下载股票历史数据")
         st.markdown("- 自动增量更新")
         st.markdown("- 计算技术指标")
+        st.markdown("- 批量处理多只股票")
 
     with col2:
         st.markdown("### 🔮 AI预测")
-        st.markdown("- XGBoost模型")
-        st.markdown("- 多时间窗口预测")
-        st.markdown("- 概率可视化")
+        st.markdown("- XGBoost概率预测")
+        st.markdown("- 多时间窗口分析")
+        st.markdown("- 交互式可视化")
+        st.markdown("- 趋势线生成")
 
     with col3:
-        st.markdown("### 🤖 智能交易")
-        st.markdown("- 强化学习策略")
-        st.markdown("- 自动交易信号")
-        st.markdown("- 风险管理")
+        st.markdown("### 🏗️ 量化管线 (v3)")
+        st.markdown("- 三层架构: 信号→风险→执行")
+        st.markdown("- 8种Alpha模型 + 集成学习")
+        st.markdown("- Walk-Forward回测验证")
+        st.markdown("- 实验管理与超参搜索")
 
 # 底部信息
 st.markdown("---")
 st.markdown(
-    '<div style="text-align: center; color: gray;">AI股票交易助手 v1.0 | 仅供学习研究使用</div>',
+    '<div style="text-align:center;color:#7a7570;font-size:0.75rem;letter-spacing:1px;font-family:JetBrains Mono,monospace">AI 量化交易系统 v3.0 · 仅供学习研究使用</div>',
     unsafe_allow_html=True
 )

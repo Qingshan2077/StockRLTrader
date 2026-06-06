@@ -1,0 +1,29 @@
+# ===========================
+# 数据源配置
+# ===========================
+
+# 市场数据源
+market_data:
+  provider: "yfinance"          # yfinance | custom | database
+  cache: true
+  cache_format: "csv"           # csv | parquet | feather
+  proxy:
+    enabled: true
+    url: "http://127.0.0.1:7897"
+
+# Benchmark 数据
+benchmark:
+  ticker: "SPY"
+  auto_download: true
+
+# 数据更新
+update:
+  auto_update: false
+  update_time: "09:30"
+
+# 预加载股票列表 (多资产阶段使用)
+universe:
+  tech: ["AAPL", "MSFT", "GOOGL", "AMZN", "META"]
+  chips: ["NVDA", "AMD", "INTC"]
+  china: ["BABA", "JD"]
+  custom: []

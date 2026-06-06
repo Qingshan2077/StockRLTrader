@@ -1,12 +1,13 @@
 # !/usr/bin/env python3
 """
-快速启动脚本 - 一键设置和运行股票数据系统
+快速启动脚本 — 一键设置和运行 AI 量化交易系统 v3
 """
 
 import os
 import sys
 import json
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 def check_dependencies():
@@ -38,9 +39,13 @@ def install_dependencies(packages):
     return False
 
 
+PROJECT_ROOT = Path(__file__).parent.parent
+CONFIG_PATH = PROJECT_ROOT / "config.json"
+
+
 def create_config():
     """创建配置文件"""
-    if Path("../config.json").exists():
+    if CONFIG_PATH.exists():
         print("✓ 配置文件已存在")
         return
 
@@ -78,7 +83,7 @@ def create_config():
         }
     }
 
-    with open("../config.json", "w", encoding="utf-8") as f:
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
 
     print("✓ 配置文件创建完成！")
@@ -87,16 +92,17 @@ def create_config():
 def show_menu():
     """显示主菜单"""
     print("\n" + "=" * 60)
-    print("股票数据管理系统 - 快速启动")
+    print("AI 量化交易系统 - 快速启动")
     print("=" * 60)
     print("\n请选择启动模式:")
-    print("1. 交互式管理界面（推荐）")
-    print("2. 快速下载示例数据（AAPL, MSFT, NVDA, TSLA）")
-    print("3. 自定义下载")
-    print("4. 仅查看配置")
+    print("1. 启动 Web 界面 (Streamlit)")
+    print("2. 快速下载示例数据 (AAPL, MSFT, NVDA, TSLA)")
+    print("3. 自定义下载股票数据")
+    print("4. 启动全流程管线 (v3 pipeline)")
+    print("5. 仅查看配置")
     print("0. 退出")
 
-    return input("\n请选择 (0-4): ").strip()
+    return input("\n请选择 (0-5): ").strip()
 
 
 def quick_download():
@@ -115,8 +121,8 @@ def quick_download():
 
     print("\n✓ 示例数据下载完成！")
     print("\n你可以运行以下命令查看数据:")
-    print("  python stock_data_manager.py --list")
-    print("  python stock_data_manager.py --info AAPL")
+    print("  python scripts/stock_data_cli.py --list")
+    print("  python scripts/stock_data_cli.py --info AAPL")
 
 
 def custom_download():
@@ -139,7 +145,7 @@ def custom_download():
 
 def main():
     print("=" * 60)
-    print("欢迎使用股票数据管理系统")
+    print("欢迎使用 AI 量化交易系统 v3")
     print("=" * 60)
 
     # 检查依赖
@@ -155,7 +161,7 @@ def main():
 
     # 创建配置
     print("\n[2/3] 检查配置...")
-    if not Path("../config.json").exists():
+    if not CONFIG_PATH.exists():
         create_config()
     else:
         print("✓ 配置文件已存在")
@@ -167,11 +173,15 @@ def main():
         choice = show_menu()
 
         if choice == "1":
-            print("\n启动交互式管理界面...\n")
+            print("\n启动 Streamlit Web 界面...\n")
             try:
-                from stock_manager_advanced import AdvancedStockManager
-                manager = AdvancedStockManager()
-                manager.interactive_menu()
+                import subprocess
+                subprocess.run([
+                    sys.executable, "-m", "streamlit", "run",
+                    str(PROJECT_ROOT / "frontend" / "app.py"),
+                    "--server.headless", "false",
+                    "--browser.gatherUsageStats", "false",
+                ])
             except KeyboardInterrupt:
                 print("\n\n程序已退出")
                 break
@@ -183,10 +193,23 @@ def main():
             custom_download()
 
         elif choice == "4":
-            with open("../config.json", "r", encoding="utf-8") as f:
-                config = json.load(f)
-            print("\n当前配置:")
-            print(json.dumps(config, indent=2, ensure_ascii=False))
+            print("\n启动全流程管线 (v3)...\n")
+            try:
+                import subprocess
+                subprocess.run([
+                    sys.executable, str(PROJECT_ROOT / "run_pipeline.py"),
+                ])
+            except KeyboardInterrupt:
+                print("\n\n管线已中断")
+
+        elif choice == "5":
+            if CONFIG_PATH.exists():
+                with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+                print("\n当前配置:")
+                print(json.dumps(config, indent=2, ensure_ascii=False))
+            else:
+                print("\n配置文件不存在，请先运行初始化")
 
         elif choice == "0":
             print("\n再见！")

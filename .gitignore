@@ -1,5 +1,9 @@
 *.log
 *.idea
 data/
+.claude/
+.jbeval/
+logs/
 stock_data/
 __pycache__/
+CLAUDE.md

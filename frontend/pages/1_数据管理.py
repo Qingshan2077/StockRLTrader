@@ -10,13 +10,15 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from improved_data_engine import DataEngine, BatchDataEngine
 
+from frontend.v3_utils import apply_theme
+
 st.set_page_config(
     page_title="数据管理",
-    page_icon="📊",
+    page_icon="▸",
     layout="wide"
 )
-
-st.title("📊 数据管理中心")
+apply_theme()
+st.markdown('<h1 style="font-family:Noto Serif SC,serif;font-weight:600;color:#e8e4d9;border-bottom:1px solid #252a35;padding-bottom:0.6rem"><span style="color:#c9a84c">▸</span> 数据管理中心</h1>', unsafe_allow_html=True)
 
 
 # 加载配置
@@ -564,4 +566,4 @@ with tab5:
 
 # 页面底部
 st.markdown("---")
-st.info("💡 提示: 建议定期更新数据以保持最新状态")
+st.markdown('<div style="text-align:center;color:#7a7570;font-size:0.75rem;letter-spacing:1px;font-family:JetBrains Mono,monospace">建议定期更新数据以保持最新状态</div>', unsafe_allow_html=True)

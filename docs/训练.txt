@@ -1,0 +1,127 @@
+● 全部 13 个 Phase 完成，共约 65 个新 Python 文件 + 6 个 YAML 配置文件。
+
+  ---
+  最终项目结构
+
+  StockTrader/
+  ├── config/                         # Phase 0: YAML 配置系统
+  │   ├── default.yaml                # 系统基础配置
+  │   ├── model.yaml                  # 8种模型超参
+  │   ├── risk.yaml                   # 10+ 风控参数
+  │   ├── rl.yaml                     # PPO/SAC + 奖励权重
+  │   ├── backtest.yaml               # 回测 + 市场冲击模型
+  │   └── data.yaml                   # 数据源 + 缓存配置
+  │
+  ├── utils/                          # Phase 0: 基础设施
+  │   ├── config_loader.py            # YAML 加载 + 合并 + 环境变量
+  │   ├── logging_system.py           # 多通道日志 (4通道)
+  │   └── helpers.py                  # 共享工具函数
+  │
+  ├── layers/
+  │   ├── data/                       # Phase 0: 数据层
+  │   │   ├── data_loader.py          # yfinance + CSV 缓存
+  │   │   ├── data_provider.py        # MarketDataProvider 统一接口
+  │   │   └── multi_asset_loader.py   # 多资产加载 (Phase 12)
+  │   │
+  │   ├── features/                   # Phase 1: 特征工程 v2
+  │   │   ├── feature_registry.py     # 特征注册表 (name/group/params/version)
+  │   │   ├── feature_cache.py        # 因子缓存 (parquet, md5 hash)
+  │   │   ├── feature_pipeline.py     # 可配置管线 (rolling/expanding)
+  │   │   └── features/               # 6个特征组模块
+  │   │       ├── trend_features.py
+  │   │       ├── momentum_features.py
+  │   │       ├── volatility_features.py
+  │   │       ├── volume_features.py
+  │   │       ├── risk_features.py
+  │   │       └── market_features.py
+  │   │
+  │   ├── signals/                    # Phase 2: Alpha 模型库
+  │   │   ├── base_model.py           # 统一抽象接口
+  │   │   ├── trainer.py              # 统一训练器 + 交叉验证
+  │   │   ├── labels/label_factory.py # 回归/分类/排序标签
+  │   │   └── models/
+  │   │       ├── linear_model.py     # Linear/Ridge/Lasso
+  │   │       ├── xgboost_model.py    # XGBoost
+  │   │       ├── lightgbm_model.py   # LightGBM
+  │   │       ├── lstm_model.py       # LSTM
+  │   │       ├── gru_model.py        # GRU
+  │   │       ├── tcn_model.py        # Temporal CNN
+  │   │       └── transformer_model.py # Transformer
+  │   │
+  │   ├── ensemble/                   # Phase 3: Signal Ensemble
+  │   │   ├── base_ensemble.py        # 抽象基类
+  │   │   ├── weighted_ensemble.py    # 加权平均
+  │   │   ├── stacking_ensemble.py    # Stacking
+  │   │   ├── voting_ensemble.py      # 投票融合
+  │   │   ├── regime_ensemble.py      # Regime Switching
+  │   │   └── ensemble_manager.py     # 统一管理
+  │   │
+  │   ├── portfolio/                  # Phase 5: 组合构建
+  │   │   ├── constructor.py          # sigmoid/zscore/rank 权重映射
+  │   │   ├── optimizer.py            # Mean-Variance/Risk Parity
+  │   │   └── rebalancer.py           # Calendar/Threshold 再平衡
+  │   │
+  │   ├── risk/                       # Phase 6: 机构级风控
+  │   │   ├── risk_engine.py          # 统一风控引擎 (YAML 驱动)
+  │   │   ├── cost_model.py           # 市场冲击 sqrt 模型
+  │   │   └── constraints/
+  │   │       ├── position_constraints.py
+  │   │       ├── volatility_constraints.py
+  │   │       ├── drawdown_control.py
+  │   │       └── liquidity_constraints.py
+  │   │
+  │   ├── rl/                         # Phase 7: RL v2
+  │   │   ├── trainer.py              # 统一 PPO/SAC 训练器
+  │   │   ├── reward.py               # 多目标奖励 + ablation
+  │   │   └── algorithms/             # (SAC via sb3)
+  │   │
+  │   ├── env/                        # Phase 7: Gymnasium 环境
+  │   │   └── execution_env.py        # 连续动作 execution_ratio
+  │   │
+  │   ├── backtest/                   # Phase 8: 事件驱动回测
+  │   │   ├── backtest_engine.py      # 三种模式回测引擎
+  │   │   ├── event.py                # Event/Market/Signal/Order/Fill
+  │   │   ├── event_queue.py          # 优先级事件队列
+  │   │   ├── execution_simulator.py  # 部分成交+滑点
+  │   │   ├── walk_forward.py         # Walk-Forward 回测
+  │   │   └── report.py               # JSON 报告生成
+  │   │
+  │   ├── evaluation/                 # Phase 4 + 9: 评估
+  │   │   ├── alpha_eval.py           # IC/RankIC/IC decay/SHAP
+  │   │   ├── metrics.py              # 15项回测指标
+  │   │   ├── attribution.py          # Alpha/Cost/Turnover/Risk 归因
+  │   │   └── comparison.py           # 策略对比 + 显著性检验
+  │   │
+  │   ├── experiments/                # Phase 10: 实验管理
+  │   │   ├── manager.py              # 实验追踪 (类似 MLflow)
+  │   │   ├── storage.py              # SQLite 持久化
+  │   │   ├── comparison.py           # 多实验对比
+  │   │   └── hparam_search.py        # 网格/随机搜索
+  │   │
+  │   └── inference/                  # Phase 13: 在线推理
+  │       ├── predictor.py            # 加载模型 → 单步推理
+  │       └── monitor.py              # signal drift / feature drift
+  │
+  ├── run_pipeline.py                 # 全流程编排 (一键执行)
+  ├── train_signal.py                 # 信号模型训练
+  ├── train_rl.py                     # RL 训练
+  ├── run_backtest.py                 # 回测入口 (向后兼容)
+  └── 开发计划v3.txt                   # 完整开发计划
+
+  关键测试命令
+
+  # 全流程 (一键)
+  python run_pipeline.py --ticker AAPL
+
+  # 跳过 RL
+  python run_pipeline.py --ticker AAPL --skip-rl
+
+  # Walk-Forward 模式
+  python run_pipeline.py --ticker AAPL --walk-forward
+
+  # 自定义配置
+  python run_pipeline.py --config my_config.yaml
+
+  # 单步训练
+  python train_signal.py --ticker AAPL --model lightgbm
+  python train_rl.py --ticker AAPL --algorithm PPO
