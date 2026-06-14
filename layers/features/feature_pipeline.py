@@ -79,6 +79,12 @@ class FeaturePipeline:
                 for col in new_cols:
                     self.registry.register(FeatureMeta(name=col, group=group_name))
 
+        # ⚠️ 防前瞻泄漏：所有非OHLCV特征列统一 shift(1)
+        # 确保特征在时间t不使用Close[t]（与标签分母共享的变量）
+        _price_cols = {'Open', 'High', 'Low', 'Close', 'Volume', 'Adj Close'}
+        _feat_cols = [c for c in result.columns if c not in _price_cols]
+        result[_feat_cols] = result[_feat_cols].shift(1)
+
         result.dropna(inplace=True)
 
         # 写缓存

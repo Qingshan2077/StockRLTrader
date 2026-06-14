@@ -29,7 +29,7 @@ with c1:
     do_features = st.checkbox("特征工程", value=True)
     do_signal = st.checkbox("Alpha 模型 (LightGBM)", value=True)
     do_backtest = st.checkbox("风控回测对比", value=True)
-    do_rl = st.checkbox("RL 执行优化", value=False)
+    do_rl = st.checkbox("RL 执行（已废弃，需 --enable-rl）", value=False)
 
     horizon = st.slider("预测天数", 1, 20, 5, key="pipe_h")
     run_btn = st.button("▸ 执行全流程", use_container_width=True, type="primary")

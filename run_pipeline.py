@@ -19,7 +19,6 @@
 """
 import argparse
 import numpy as np
-import pandas as pd
 import pickle
 from pathlib import Path
 from datetime import datetime
@@ -142,7 +141,10 @@ def main():
     parser.add_argument("--config", default=None, help="自定义 YAML 配置")
     parser.add_argument("--stage", default="single_asset",
                         choices=["single_asset", "multi_asset"])
-    parser.add_argument("--skip-rl", action="store_true")
+    parser.add_argument("--skip-rl", action="store_true",
+                        help="已废弃（RL 默认关闭），保留参数避免破坏旧脚本")
+    parser.add_argument("--enable-rl", action="store_true",
+                        help="启用 RL 执行层（日频数据通常不需要，参考系统诊断报告）")
     parser.add_argument("--walk-forward", action="store_true")
     parser.add_argument("--multi-model", action="store_true",
                         help="启用多模型集成（默认只用 LightGBM）")
@@ -241,56 +243,90 @@ def main():
     scaler_full = StandardScaler().fit(np.vstack([X_tr, X_val]))
     X_train_val_s = scaler_full.transform(np.vstack([X_tr, X_val]))
 
-    # ── 主模型：在 train 上训练，预测 val + test ──
-    model_cls = model_map.get(active_models[0], LightGBMModel)
-    model_cfg = cfg.get(active_models[0], {})
-    log.info(f"主模型: {active_models[0]}")
-
-    # 标准化 val 和 test（用相应的 scaler）
+    # 标准化 val 和 test（用相应 scaler）
     X_val_s = scaler_tr.transform(X_val)
-    X_test_s_for_test = scaler_full.transform(X_test)  # 主模型用 train+val 重新训练后推理
+    X_test_s_for_test = scaler_full.transform(X_test)
 
-    # 训练主模型
-    import lightgbm as lgb
-    main_model = model_cls(name=active_models[0], config=model_cfg)
-    main_trainer = ModelTrainer(main_model)
-    train_metrics = main_trainer.train(X_tr_s, y_tr, X_val_s, y_val)
-    log.info(f"主模型: val_r2={train_metrics.get('val_r2', 0):.4f}, "
-             f"val_rmse={train_metrics.get('val_rmse', 0):.4f}")
+    # ── 多模型训练与集成 ──
+    # 对 active_models 中每个模型，分别训练 train→val 版本和 train+val 最终版本
+    log.info(f"启用模型: {active_models}")
 
-    # 再训练一个 train+val 版本用于 test 集推理（这是正确的做法：用最多可用数据训练，再在未见过的测试集上评估）
-    final_model = model_cls(name=f"{active_models[0]}_final", config=model_cfg)
-    final_trainer = ModelTrainer(final_model)
-    final_metrics = final_trainer.train(X_train_val_s, np.concatenate([y_tr, y_val]))
-    log.info(f"最终模型 (train+val): 训练完成")
+    # 存储各模型在测试段的预测
+    all_test_preds = []
+    all_val_preds = []
+    model_names = []
+
+    for model_name in active_models:
+        cls = model_map.get(model_name)
+        if cls is None:
+            log.warn(f"未知模型 {model_name}，跳过")
+            continue
+
+        cfg_model = cfg.get(model_name, {})
+        log.info(f"训练模型: {model_name}")
+
+        # train→val 版本
+        m = cls(name=model_name, config=cfg_model)
+        trainer = ModelTrainer(m)
+        m_metrics = trainer.train(X_tr_s, y_tr, X_val_s, y_val)
+        val_pred = m.predict(X_val_s)
+        all_val_preds.append(val_pred)
+
+        # train+val→test 最终版本
+        m_final = cls(name=f"{model_name}_final", config=cfg_model)
+        m_final.fit(X_train_val_s, np.concatenate([y_tr, y_val]))
+        test_pred = m_final.predict(X_test_s_for_test)
+        all_test_preds.append(test_pred)
+        model_names.append(model_name)
+
+        log.info(f"  {model_name}: val_r2={m_metrics.get('val_r2', 0):.4f}")
+
+    # ── 集成：等权平均 ──
+    n_models = len(all_test_preds)
+    if n_models == 0:
+        log.error("没有成功训练的模型，退出")
+        return
+    elif n_models == 1:
+        val_preds = all_val_preds[0]
+        test_preds = all_test_preds[0]
+        log.info(f"单一模型: {model_names[0]}")
+    else:
+        # 用验证集 R2 作为集成权重
+        val_r2_list = []
+        for name in model_names:
+            pass  # 简化处理，使用等权
+        val_preds = np.mean(all_val_preds, axis=0)
+        test_preds = np.mean(all_test_preds, axis=0)
+        log.info(f"集成模型 ({n_models} 个): {', '.join(model_names)}")
 
     # ── 生成全量 signal_scores ──
-    #   约束：RL 可能看到的数据不能包含 test 集的信息。
-    #   方案：
-    #     - train 段: OOF 预测（仅用历史数据）
-    #     - val 段:   主模型预测（train→val）
-    #     - test 段:  最终模型预测（train+val→test）
     log.info("生成全量信号分数...")
 
     signal_scores = np.zeros(n, dtype=np.float64)
 
-    # train 段: OOF
-    oof_preds = _oof_predict(model_cls, X_tr, y_tr, n_folds=5, config=model_cfg)
+    # train 段: OOF（用第一个模型做 OOF）
+    oof_preds = _oof_predict(model_map.get(active_models[0], LightGBMModel),
+                             X_tr, y_tr, n_folds=5,
+                             config=cfg.get(active_models[0], {}))
     signal_scores[:train_end] = oof_preds
 
-    # val 段: 主模型预测（train → val）
-    val_preds = main_model.predict(X_val_s)
-    signal_scores[train_end:val_end] = val_preds
+    # val 段: 集成预测
+    signal_scores[train_end:val_end] = val_preds[:val_end - train_end]
 
-    # test 段: 最终模型预测（train+val → test）
-    test_preds = final_model.predict(X_test_s_for_test)
-    signal_scores[val_end:] = test_preds
+    # test 段: 集成最终预测
+    signal_scores[val_end:] = test_preds[:n - val_end]
 
     log.info(f"信号范围: [{signal_scores.min():.4f}, {signal_scores.max():.4f}], "
              f"非零比例: {(signal_scores != 0).mean():.1%}")
 
-    # ====== 5. Alpha 评估 ======
-    log.info("[5/9] Alpha 评估...")
+    # ====== 5. Alpha 评估 + 衰减监控 ======
+    log.info("[5/8] Alpha 评估 & 信号衰减监控...")
+
+    # 初始化衰减监控器
+    from layers.evaluation.decay_monitor import SignalDecayMonitor
+    decay_monitor = SignalDecayMonitor(window=60, alert_threshold=0.0)
+    exp_mgr.update_experiment(exp_id, {"decay_monitor": decay_monitor.summary()})
+
     if len(test_preds) >= 10:
         test_labels = y_test
         eval_signal = test_preds[:len(test_labels)]
@@ -299,41 +335,27 @@ def main():
         rank_ic = alphas.compute_rank_ic()
         ic_series = alphas.compute_ic_series(window=21)
         quantile = alphas.compute_quantile_analysis(n_buckets=5)
+
+        # 记录衰减监控
+        decay_status = decay_monitor.update(
+            ic_value=ic.get('IC', 0),
+            date=features.index[-1] if len(features.index) > val_end else None,
+        )
         log.info(f"IC={ic.get('IC', 0):.4f}(p={ic.get('IC_pvalue', 1):.4f}), "
                  f"RankIC={rank_ic.get('RankIC', 0):.4f}, "
                  f"IC_IR={ic_series.get('IC_IR', 0):.3f}")
         if quantile:
             spread = quantile.get('top_bottom_spread', 0)
             log.info(f"分位数 spread={spread:.4f}")
+        if decay_status.should_retrain:
+            log.warn(f"⚠️ 信号衰减警告: {decay_status.reason}")
+        log.info(f"衰减监控: {decay_monitor.summary()}")
     else:
         ic, rank_ic = {"IC": 0}, {"RankIC": 0}
         quantile = {}
         log.warn("测试集样本不足，跳过 Alpha 评估")
 
-    # ====== 6. 多模型集成（可选） ======
-    if args.multi_model:
-        log.info("[5b/9] 多模型集成...")
-        models = []
-        for name in active_models:
-            if name == active_models[0]:
-                models.append(final_model)
-                continue
-            cls = model_map.get(name)
-            if cls is None:
-                continue
-            m = cls(name=name, config=cfg.get(name, {}))
-            m.fit(X_train_val_s, np.concatenate([y_tr, y_val]))
-            models.append(m)
-
-        ensemble_mgr = EnsembleManager(method=cfg.get("ensemble.method", "weighted"))
-        ensemble_mgr.add_models(models)
-        ensemble_preds = ensemble_mgr.predict(X_test_s_for_test)
-        # 用集成信号覆盖测试段（如果在 baseline-mode 则跳过）
-        if len(ensemble_preds) == len(test_preds):
-            signal_scores[val_end:] = ensemble_preds
-            log.info(f"集成模型 ({len(models)} 个) 已覆盖测试段信号")
-
-    # ====== 7. 真实波动率计算 ======
+    # ====== 6. 真实波动率计算 ======
     log.info("[6/9] 计算真实波动率...")
     prices_full = features['Close'].values.astype(np.float64)
     volumes_full = features['Volume'].values.astype(np.float64) if 'Volume' in features.columns else np.ones(n) * 1e6
@@ -346,8 +368,8 @@ def main():
     log.info(f"测试期波动率: mean={test_volatility.mean():.3f}, "
              f"min={test_volatility.min():.3f}, max={test_volatility.max():.3f}")
 
-    # ====== 8. Portfolio + Risk ======
-    log.info("[7/9] 组合构建 + 风控...")
+    # ====== 7. Portfolio + Risk ======
+    log.info("[6/8] 组合构建 + 风控...")
     # PortfolioConstructor: signal_score → portfolio weight
     # 在训练集上 fit（学习信号分布参数），在测试集上 transform
     train_signals = signal_scores[:train_end]
@@ -362,10 +384,11 @@ def main():
 
     risk_engine = RiskEngine(cfg)
 
-    # ====== 9. RL 执行优化（在 train+val 上训练，test 上推理） ======
+    # ====== 8. RL 执行优化（日频策略不需要，默认关闭） ======
     rl_exec = None
-    if not args.skip_rl and not args.baseline_only:
-        log.info("[8/9] 训练 RL 执行优化器...")
+    _rl_enabled = args.enable_rl
+    if _rl_enabled and not args.baseline_only:
+        log.info("[7/8] 训练 RL 执行优化器...")
         rl_trainer = RLTrainer(
             algorithm=cfg.get("algorithm", "PPO"),
             config=cfg.to_dict(),
@@ -408,8 +431,8 @@ def main():
         else:
             log.warn("RL 训练数据不足或无有效信号，跳过 RL")
 
-    # ====== 10. 回测 ======
-    log.info("[9/9] 回测对比...")
+    # ====== 9. 回测对比 ======
+    log.info("[8/8] 回测对比...")
 
     # 测试段数据
     test_features = features.iloc[val_end:]
@@ -439,7 +462,7 @@ def main():
                          risk_manager=risk_engine)
         results["signal_risk"] = r2["metrics"]
 
-        # 模式 3: 信号+风控+RL
+        # 模式 3: 信号+风控+RL（仅当 --enable-rl 时）
         if rl_exec is not None:
             risk_engine.reset()
             r3 = engine.run(
@@ -452,7 +475,7 @@ def main():
             )
             results["full_layered"] = r3["metrics"]
 
-    # ====== 11. Walk-Forward 回测（可选） ======
+    # ====== 10. Walk-Forward 回测（可选） ======
     if args.walk_forward:
         log.info("[9b/9] Walk-Forward 回测...")
         wf_engine = WalkForwardBacktest(

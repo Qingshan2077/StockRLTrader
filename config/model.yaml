@@ -2,13 +2,12 @@
 # Alpha 模型配置
 # ===========================
 
-# 当前使用的模型列表
+# 当前使用的模型列表 — 精简至 3 个核心模型（Ridge 线性基准 + LightGBM 非线性主力 + MLP 浅层 NN）
+# 原因：日频金融数据信噪比极低，复杂模型（LSTM/GRU/TCN/Transformer）需要 5000+ 样本才能避免过拟合
 active_models:
   - "lightgbm"
-  # - "xgboost"
-  # - "ridge"
-  # - "mlp"
-  # - "lstm"
+  - "ridge"
+  # - "mlp"  # 需要 torch，取消注释前先 pip install torch
 
 # 标签配置
 label:
@@ -16,81 +15,84 @@ label:
   horizons: [5]                # 预测天数, 可多个
   classification_threshold: 0.005  # 分类模式的涨跌阈值
 
-# LightGBM
+# LightGBM — 严格防过拟合参数（金融数据信噪比极低，需保守）
 lightgbm:
-  n_estimators: 200
-  learning_rate: 0.05
-  max_depth: 6
-  num_leaves: 31
-  min_child_samples: 20
-  subsample: 0.8
-  colsample_bytree: 0.8
-  reg_alpha: 0.1
-  reg_lambda: 0.1
+  n_estimators: 50
+  learning_rate: 0.03
+  max_depth: 3
+  num_leaves: 15
+  min_child_samples: 30
+  min_split_gain: 0.01
+  subsample: 0.7
+  subsample_freq: 1
+  colsample_bytree: 0.5
+  reg_alpha: 1.0
+  reg_lambda: 1.0
 
-# XGBoost
-xgboost:
-  n_estimators: 200
-  learning_rate: 0.05
-  max_depth: 5
-  subsample: 0.8
-  colsample_bytree: 0.8
-  reg_alpha: 0.1
-  reg_lambda: 0.1
+# XGBoost — 已禁用（和 LightGBM 功能重叠，日频上无显著差异可用）
+# xgboost:
+#   n_estimators: 200
+#   learning_rate: 0.05
+#   max_depth: 5
+#   subsample: 0.8
+#   colsample_bytree: 0.8
+#   reg_alpha: 0.1
+#   reg_lambda: 0.1
 
-# Ridge
+# Ridge — 线性基准，永远保留
 ridge:
   alpha: 1.0
 
-# Lasso
-lasso:
-  alpha: 0.001
+# Lasso — 已禁用（特征选择功能可通过 Ridge + 因果筛选替代）
+# lasso:
+#   alpha: 0.001
 
-# MLP
+# MLP — 浅层神经网络（2层，严格正则化）
 mlp:
-  hidden_dims: [128, 64]
-  dropout: 0.3
+  hidden_dims: [64, 32]
+  dropout: 0.4
   learning_rate: 0.001
-  batch_size: 64
-  epochs: 100
-  patience: 15
+  batch_size: 32
+  epochs: 80
+  patience: 10
+  weight_decay: 0.01
 
-# LSTM
-lstm:
-  hidden_size: 64
-  num_layers: 2
-  dropout: 0.3
-  learning_rate: 0.001
-  batch_size: 64
-  epochs: 100
-  patience: 15
-  sequence_length: 20
+# LSTM — 已禁用（日频数据量不足以训练时序模型）
+# lstm:
+#   hidden_size: 64
+#   num_layers: 2
+#   dropout: 0.3
+#   learning_rate: 0.001
+#   batch_size: 64
+#   epochs: 100
+#   patience: 15
+#   sequence_length: 20
 
-# GRU
-gru:
-  hidden_size: 64
-  num_layers: 2
-  dropout: 0.3
-  learning_rate: 0.001
-  batch_size: 64
-  epochs: 100
+# GRU — 已禁用
+# gru:
+#   hidden_size: 64
+#   num_layers: 2
+#   dropout: 0.3
+#   learning_rate: 0.001
+#   batch_size: 64
+#   epochs: 100
 
-# TCN
-tcn:
-  num_channels: [64, 64, 64]
-  kernel_size: 3
-  dropout: 0.3
-  learning_rate: 0.001
+# TCN — 已禁用
+# tcn:
+#   num_channels: [64, 64, 64]
+#   kernel_size: 3
+#   dropout: 0.3
+#   learning_rate: 0.001
 
-# Transformer
-transformer:
-  d_model: 64
-  nhead: 4
-  num_layers: 2
-  dim_feedforward: 128
-  dropout: 0.3
-  learning_rate: 0.001
-  sequence_length: 20
+# Transformer — 已禁用
+# transformer:
+#   d_model: 64
+#   nhead: 4
+#   num_layers: 2
+#   dim_feedforward: 128
+#   dropout: 0.3
+#   learning_rate: 0.001
+#   sequence_length: 20
 
 # Ensemble
 ensemble:

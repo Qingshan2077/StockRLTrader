@@ -1,6 +1,13 @@
 """
-v3 · RL 交易执行 — 训练监控 + 奖励分析 + 信号
+v3 · RL 交易执行（已废弃）
+
+⚠️ 日频策略不需要 RL 执行层（PPO/SAC）。
+   需 10,000+ episodes 才能收敛，日频数据只有 ~2500 个点。
+   保留此页面用于实验性探索，需要通过 --enable-rl 启用。
+
+参考: docs/系统诊断报告.md
 """
+
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -15,7 +22,17 @@ init_session()
 apply_theme()
 
 st.set_page_config(page_title="交易执行", page_icon="▸", layout="wide")
-st.markdown('<h1 style="font-family:Noto Serif SC,serif;font-weight:600;color:#e8e4d9;border-bottom:1px solid #252a35;padding-bottom:0.6rem"><span style="color:#c9a84c">▸</span> RL 交易执行</h1>', unsafe_allow_html=True)
+
+st.markdown("""
+<div style="background:#2d2121;border:1px solid #5a3535;border-radius:6px;padding:1rem 1.2rem;margin-bottom:1.5rem">
+<p style="margin:0;color:#e8b4b4;font-size:0.9rem">
+<strong>⚠️ RL 执行层已废弃</strong> — PPO/SAC 在日频策略上科学上不可行（需 10,000+ episodes，日频仅 ~2,500 点）。
+此页面仅作实验保留，修改信号模型请使用「模型训练」页面。
+</p>
+</div>
+""", unsafe_allow_html=True)
+
+st.markdown('<h1 style="font-family:Noto Serif SC,serif;font-weight:600;color:#e8e4d9;border-bottom:1px solid #252a35;padding-bottom:0.6rem"><span style="color:#c9a84c">▸</span> 交易执行 <span style="font-size:0.6rem;color:#7a7570;background:#1c2028;padding:0.15rem 0.6rem;border-radius:3px;margin-left:0.6rem">已废弃</span></h1>', unsafe_allow_html=True)
 
 model_names = list(st.session_state.v3_models.keys())
 with st.sidebar:
@@ -26,7 +43,7 @@ with st.sidebar:
     sel_model = st.selectbox("信号模型", model_names)
 
     st.markdown("<hr style='border-color:#252a35;margin:1rem 0'>", unsafe_allow_html=True)
-    st.markdown('<div style="font-size:0.7rem;color:#7a7570;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:0.5rem">· RL 参数</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:0.7rem;color:#7a7570;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:0.5rem">· RL 参数（实验性）</div>', unsafe_allow_html=True)
     algorithm = st.selectbox("算法", ["PPO","SAC"], index=0)
     timesteps = st.slider("训练步数", 5000, 200000, 50000, 5000)
 
@@ -37,71 +54,32 @@ with st.sidebar:
     w_to = st.slider("λ Turnover", 0.0, 1.0, 0.05, 0.01)
     w_dd = st.slider("λ Drawdown", 0.0, 1.0, 0.1, 0.01)
 
-    train_btn = st.button("▸ 训练 RL Agent", use_container_width=True)
+    train_btn = st.button("▸ 训练 RL Agent", use_container_width=True, disabled=True)
+    if train_btn:
+        st.warning("RL 训练已禁用。请使用命令行运行: python run_pipeline.py --enable-rl")
 
 tab1, tab2, tab3 = st.tabs(["训练监控", "奖励分析", "交易信号"])
 
-if train_btn:
-    with st.spinner("训练 RL Agent (可能需要几分钟)..."):
-        md = st.session_state.v3_models[sel_model]
-        test_preds = md["test_preds"]
-        features = st.session_state.v3_features
-        if features is None: st.error("数据丢失"); st.stop()
-        n = len(features); vl_end = int(n*0.8)
-        test_features = features.iloc[vl_end:]
-        test_signals = test_preds[:len(test_features)]
+# 检查是否有已训练好的 RL 执行器（通过命令行 --enable-rl 传入）
+rl_available = st.session_state.get("v3_rl_executor") is not None
 
-        prices = test_features['Close'].values
-        volumes = test_features['Volume'].values if 'Volume' in test_features.columns else np.ones(len(test_features))*1e6
-        volatilities = test_features['vol_20d'].values if 'vol_20d' in test_features.columns else np.full(len(test_features),0.2)
-
-        from layers.rl.trainer import RLTrainer
-        from layers.env.execution_env import ExecutionEnv
-        from stable_baselines3.common.vec_env import DummyVecEnv
-
-        class EnvCfg:
-            initial_balance=10000.0; commission=0.001; slippage=0.0005
-            lambda_cost=w_cost; lambda_turnover=w_to; lambda_drawdown=w_dd
-            drawdown_threshold=0.02; rl_window_size=10
-
-        env = ExecutionEnv(test_signals, np.clip(test_signals,-1,1),
-                            prices, volumes, volatilities, EnvCfg())
-        trainer = RLTrainer(algorithm=algorithm, config={"ppo":{},"sac":{}})
-        vec_env = DummyVecEnv([lambda: env])
-
-        try:
-            metrics = trainer.train(vec_env, total_timesteps=timesteps)
-            st.session_state.v3_rl_executor = trainer
-            with tab1:
-                st.success(f"训练完成")
-                if "episode_rewards" in metrics and metrics["episode_rewards"]:
-                    er = metrics["episode_rewards"]
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatter(y=er, mode="lines", name="Reward",
-                                              line=dict(color="#c9a84c",width=1)))
-                    ma = pd.Series(er).rolling(max(1,len(er)//10)).mean()
-                    fig.add_trace(go.Scatter(y=ma, mode="lines", name="MA",
-                                              line=dict(color="#e74c3c",width=2)))
-                    st.plotly_chart(dark_figure(fig, 400), use_container_width=True)
-                c1,c2 = st.columns(2)
-                with c1: metric_tile("平均执行比例", f"{metrics.get('action_mean',0):.3f}", "execution_ratio")
-                with c2: metric_tile("最终资产", f"${metrics.get('final_portfolio_value','--')}", accent="gold")
-        except Exception as e:
-            st.error(f"训练失败: {e}")
+with tab1:
+    st.info("""
+    RL 训练已默认禁用。如需实验 RL 执行层：
+    1. `python run_pipeline.py --ticker AAPL --enable-rl`
+    2. 回到此页面查看训练结果
+    """)
 
 with tab2:
-    if st.session_state.v3_rl_executor is None:
-        st.info("请先训练 RL 模型。奖励分解将在训练时记录。")
-    else:
-        section_header("奖励权重配置")
-        w_df = pd.DataFrame([
-            {"分量":"PnL","权重":w_pnl},
-            {"分量":"Cost","权重":w_cost},
-            {"分量":"Turnover","权重":w_to},
-            {"分量":"Drawdown","权重":w_dd},
-        ])
-        st.dataframe(w_df, use_container_width=True, hide_index=True)
-        st.caption("奖励 = PnL - λ₁·Cost - λ₂·Turnover - λ₃·Drawdown")
+    section_header("奖励权重配置")
+    w_df = pd.DataFrame([
+        {"分量":"PnL","权重":w_pnl},
+        {"分量":"Cost","权重":w_cost},
+        {"分量":"Turnover","权重":w_to},
+        {"分量":"Drawdown","权重":w_dd},
+    ])
+    st.dataframe(w_df, use_container_width=True, hide_index=True)
+    st.caption("奖励 = PnL - λ₁·Cost - λ₂·Turnover - λ₃·Drawdown")
 
 with tab3:
     section_header("当前交易信号")
@@ -118,8 +96,9 @@ with tab3:
                         "全仓" if tp>0.8 else ("清仓" if tp<-0.8 else ""),
                         "bullish" if tp>0 else "bearish")
         with c3:
-            rl = st.session_state.v3_rl_executor
-            metric_tile("执行比例", "RL 已就绪" if rl else "--",
-                        "RL 优化中" if rl else "需训练 RL", "gold" if rl else "steel")
+            if rl_available:
+                metric_tile("执行比例", "RL 已就绪", "RL 优化中", "gold")
+            else:
+                metric_tile("执行比例", "默认100%", "RL 未启用(默认跳过)", "steel")
     else:
         st.info("需要先训练信号模型。")

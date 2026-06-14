@@ -41,19 +41,20 @@ with st.sidebar:
 
     st.markdown("<hr style='border-color:#252a35;margin:1rem 0'>", unsafe_allow_html=True)
     st.markdown('<div style="font-size:0.7rem;color:#7a7570;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:0.5rem">· 模型选择</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:0.8rem;color:#8a8580;margin-bottom:0.5rem">推荐: LightGBM + Ridge（日频数据不需要复杂模型）</div>', unsafe_allow_html=True)
     model_options = {
-        "lightgbm":  "LightGBM",
-        "xgboost":   "XGBoost",
-        "ridge":     "Ridge",
-        "mlp":       "MLP",
-        "lstm":      "LSTM",
-        "gru":       "GRU",
-        "tcn":       "Temporal CNN",
-        "transformer":"Transformer",
+        "lightgbm":  "LightGBM ★ 推荐",
+        "ridge":     "Ridge ★ 推荐",
+        "xgboost":   "XGBoost（可选，与LightGBM功能重叠）",
+        "mlp":       "MLP（需torch，可选）",
+        "lstm":      "LSTM（需torch，日频易过拟合）",
+        "gru":       "GRU（需torch，日频易过拟合）",
+        "tcn":       "TCN（需torch，日频易过拟合）",
+        "transformer":"Transformer（需torch，日频易过拟合）",
     }
     selected = st.multiselect(
         "选择模型", list(model_options.keys()),
-        default=["lightgbm"],
+        default=["lightgbm", "ridge"],
         format_func=lambda x: model_options[x],
     )
 

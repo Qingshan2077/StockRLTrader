@@ -1,9 +1,17 @@
 *.log
 *.idea
+*.jbeval
+*.claude
+*.streamlit
+*.txt
+
 data/
-.claude/
-.jbeval/
-logs/
+docs/
 stock_data/
+results/
 __pycache__/
-CLAUDE.md
+
+# 忽略所有 .md 文件
+*.md
+# 但不忽略 README.md 文件
+!README.md

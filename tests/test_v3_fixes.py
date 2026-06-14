@@ -135,7 +135,7 @@ def test_oof_no_future_leakage():
             sub_model = LinearModel(name="ridge", config={"alpha": 1.0})
             sub_model.fit(X[:test_idx], y[:test_idx])
             ref_pred = sub_model.predict(X[test_idx:test_idx+1])[0]
-            if abs(oof[test_idx] - ref_pred) > 1e-3:
+            if abs(oof[test_idx] - ref_pred) > 1e-4:
                 print(f"  {FAIL} OOF 预测在 index={test_idx} 处不匹配")
                 print(f"    oof={oof[test_idx]:.6f}, ref={ref_pred:.6f}")
                 return False
@@ -274,7 +274,7 @@ def test_backtest_commission_tax():
     if buys:
         cost = buys[0].get('cost', 0)
         # 预期成本 ≈ 5000 * (0.001 + 0.0005) = 7.5
-        expected_cost = 5000 + 5000 * 0.0015  # 买入金额 + 佣金滑点
+        expected_cost = 5000 * 0.0015
         if abs(cost - expected_cost) < 0.5:
             print(f"  {PASS} 交易成本正确: {cost:.4f} (预期 ~{expected_cost:.2f})")
         else:
