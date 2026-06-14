@@ -1,0 +1,18 @@
+*.log
+*.idea
+*.jbeval
+
+*.txt
+
+data/
+docs/
+stock_data/
+results/
+__pycache__/
+
+node_modules/
+
+# 忽略所有 .md 文件
+*.md
+# 但不忽略 README.md 文件
+!README.md

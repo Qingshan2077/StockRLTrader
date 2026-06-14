@@ -1,0 +1,43 @@
+# ===========================
+# 回测参数配置
+# ===========================
+
+initial_balance: 10000.0
+commission: 0.001              # 手续费率 0.1%
+slippage: 0.0005               # 滑点 0.05%
+tax: 0.0                       # 印花税 (A股市场用)
+
+# 市场冲击模型
+market_impact:
+  model: "sqrt"                 # sqrt | linear | none
+  k: 0.1                       # 冲击系数 (sqrt模型: cost = k * sqrt(order/ADV))
+
+# 回测模式
+mode: "bar_based"              # bar_based | event_driven
+frequency: "daily"             # daily | minute
+
+# Walk-Forward 回测
+walk_forward:
+  enabled: false
+  n_folds: 5
+  train_window_years: 3
+  test_window_years: 1
+
+# 执行模拟
+execution:
+  partial_fill: true
+  max_fill_ratio: 0.3          # 单次最多成交 ADV 的 30%
+  delay: 1                     # 延迟 1 个 bar 执行
+  slippage_model: "fixed"      # fixed | proportional
+
+# 杠杆与保证金
+leverage:
+  enabled: false
+  max_leverage: 1.0
+  margin_rate: 0.5
+
+# 报告
+report:
+  output_format: "json"        # json | html | pdf
+  save_trades: true
+  save_nav: true
