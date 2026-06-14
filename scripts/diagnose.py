@@ -17,7 +17,6 @@ def check_dependencies():
     print("=" * 60)
 
     required = {
-        'streamlit': 'streamlit',
         'pandas': 'pandas',
         'numpy': 'numpy',
         'yfinance': 'yfinance',
@@ -210,9 +209,9 @@ def provide_recommendations(deps_ok, data_ok, env_ok):
     if deps_ok and data_ok and env_ok:
         print("\n🎉 系统状态良好！\n")
         print("快速开始:")
-        print("1. 运行: python run.py")
-        print("2. 进入'▸ 模型训练'页面训练 Alpha 模型")
-        print("3. 进入'▸ 交易执行'页面进行 RL 训练")
+        print("1. 后端: python run_api.py")
+        print("2. 前端: cd frontend-react && npm run dev")
+        print("3. 进入 React 工作台训练 Alpha 或截面模型")
         return
 
     print("\n发现以下问题，请按顺序修复:\n")
@@ -224,10 +223,11 @@ def provide_recommendations(deps_ok, data_ok, env_ok):
     if not data_ok:
         print("❌ 数据问题")
         print("   修复方法:")
-        print("   1. 运行 python run.py 启动 Web 界面")
-        print("   2. 进入'📊 数据管理'页面")
-        print("   3. 下载股票数据（建议至少 2-3 年）")
-        print("   4. 如果数据有问题，可以删除后重新下载\n")
+        print("   1. 运行 python run_api.py 启动后端")
+        print("   2. 运行 cd frontend-react && npm run dev 启动前端")
+        print("   3. 进入数据中心页面")
+        print("   4. 下载股票数据（建议至少 2-3 年）")
+        print("   5. 如果数据有问题，可以删除后重新下载\n")
 
     if not env_ok:
         print("❌ 环境问题")

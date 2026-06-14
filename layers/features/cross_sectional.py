@@ -72,7 +72,7 @@ def zscore_normalize(series: pd.Series, cap: float = 3.0) -> pd.Series:
     """
     mean = series.mean()
     std = series.std(ddof=1)
-    if std < 1e-12:
+    if pd.isna(std) or std < 1e-12:
         return pd.Series(0.0, index=series.index)
     z = (series - mean) / std
     return z.clip(-cap, cap)

@@ -1,5 +1,7 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
+from api.schemas.jobs import JobResponse
+from api.services.job_manager import Job, job_manager
 from api.services.cross_section_service import CrossSectionService
 
 
@@ -14,7 +16,11 @@ def get_cross_section_universe(market: str = "a_share", limit: int = 300) -> dic
     try:
         from layers.data.ashare_universe import get_universe
 
-        tickers = get_universe()[:limit]
+        universe = get_universe(size=limit)
+        if hasattr(universe, "to_dict") and "code" in universe:
+            tickers = universe["code"].astype(str).tolist()
+        else:
+            tickers = list(universe)[:limit]
     except Exception:
         tickers = []
 
@@ -24,6 +30,28 @@ def get_cross_section_universe(market: str = "a_share", limit: int = 300) -> dic
 @router.get("/local-rank")
 def get_local_cross_section_rank(limit: int = 100) -> dict:
     return CrossSectionService().local_rank(limit=limit)
+
+
+@router.post("/train", response_model=JobResponse)
+def train_cross_section_model(
+    limit: int = Query(default=100, ge=5, le=500),
+    model_type: str = Query(default="lightgbm"),
+    horizon: int = Query(default=5, ge=1, le=60),
+    force_rebuild: bool = Query(default=False),
+) -> JobResponse:
+    def run(job: Job) -> dict:
+        job.log("building full cross-section factor panel", 0.2)
+        result = CrossSectionService().train(
+            limit=limit,
+            model_type=model_type,
+            horizon=horizon,
+            force_rebuild=force_rebuild,
+        )
+        job.log("cross-section model training completed", 1.0)
+        return result
+
+    job = job_manager.submit(f"cross-section:{model_type}:{limit}", run)
+    return JobResponse(**job.public_dict())
 
 
 @router.post("/local-backtest")

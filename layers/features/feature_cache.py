@@ -51,6 +51,17 @@ class FeatureCache:
             self._hits += 1
             return pd.read_parquet(path)
 
+        # 兼容动态注册因子的场景：FeaturePipeline 在生成特征后才知道完整 registry，
+        # 因此首次读取时 registry 可能还是空的。精确键未命中时，回退到该股票最新缓存。
+        candidates = sorted(
+            self.data_dir.glob(f"{ticker.upper()}_features_*.parquet"),
+            key=lambda item: item.stat().st_mtime,
+            reverse=True,
+        )
+        if candidates:
+            self._hits += 1
+            return pd.read_parquet(candidates[0])
+
         self._misses += 1
         return None
 
@@ -61,6 +72,10 @@ class FeatureCache:
         key = self._cache_key(ticker, registry, start_date, end_date, data_hash)
         path = self._cache_path(ticker, key)
         features.to_parquet(path)
+        latest_key = self._cache_key(ticker, registry, start_date, end_date)
+        latest_path = self._cache_path(ticker, latest_key)
+        if latest_path != path:
+            features.to_parquet(latest_path)
 
     def clear(self, ticker: str = None) -> None:
         """清除缓存"""

@@ -272,7 +272,7 @@ def main():
     test_pred.to_parquet(f"{RESULT_DIR}/test_pred_full.parquet")
 
     log.info(f"\n✅ 截面管线结束! 结果目录: {RESULT_DIR}/")
-    log.info(f"  前端看板: streamlit run frontend/app.py → 第12/13页")
+    log.info(f"  前端看板: React Cross Section 页面（frontend-react）")
     log.info(f"  下次加 --skip-data --skip-train 跳过数据加载和训练")
 
 

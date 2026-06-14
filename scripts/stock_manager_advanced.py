@@ -7,12 +7,13 @@ import json
 import os
 import sys
 from pathlib import Path
+import yaml
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from improved_data_engine import DataEngine, BatchDataEngine
 
 
 class AdvancedStockManager:
-    def __init__(self, config_path="config.json"):
+    def __init__(self, config_path="config/default.yaml"):
         self.config_path = config_path
         self.config = self.load_config()
 
@@ -30,10 +31,26 @@ class AdvancedStockManager:
         """加载配置文件"""
         if Path(self.config_path).exists():
             with open(self.config_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                if self.config_path.endswith((".yaml", ".yml")):
+                    return self.normalize_config(yaml.safe_load(f) or {})
+                return self.normalize_config(json.load(f))
         else:
             print(f"配置文件 {self.config_path} 不存在，使用默认配置")
             return self.get_default_config()
+
+    def normalize_config(self, config):
+        """兼容 YAML system.* 配置和旧版 JSON data.* 配置。"""
+        if "data" not in config:
+            system = config.get("system", {})
+            config["data"] = {
+                "directory": system.get("data_dir", "stock_data"),
+                "start_date": system.get("start_date", "2015-01-01"),
+            }
+        if "proxy" not in config:
+            config["proxy"] = {"enabled": False, "url": ""}
+        if "watchlist" not in config:
+            config["watchlist"] = {"my_stocks": []}
+        return config
 
     def get_default_config(self):
         """获取默认配置"""
@@ -47,7 +64,10 @@ class AdvancedStockManager:
     def save_config(self):
         """保存配置"""
         with open(self.config_path, 'w', encoding='utf-8') as f:
-            json.dump(self.config, f, indent=2, ensure_ascii=False)
+            if self.config_path.endswith((".yaml", ".yml")):
+                yaml.safe_dump(self.config, f, allow_unicode=True, sort_keys=False)
+            else:
+                json.dump(self.config, f, indent=2, ensure_ascii=False)
         print(f"配置已保存到 {self.config_path}")
 
     def show_watchlists(self):

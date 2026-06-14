@@ -5,7 +5,7 @@
 
 import os
 import sys
-import json
+import yaml
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -40,7 +40,7 @@ def install_dependencies(packages):
 
 
 PROJECT_ROOT = Path(__file__).parent.parent
-CONFIG_PATH = PROJECT_ROOT / "config.json"
+CONFIG_PATH = PROJECT_ROOT / "config" / "default.yaml"
 
 
 def create_config():
@@ -64,27 +64,24 @@ def create_config():
     start_date = input("历史数据起始日期 (默认: 2015-01-01): ").strip() or "2015-01-01"
 
     config = {
+        "system": {
+            "data_dir": data_dir,
+            "start_date": start_date,
+        },
         "proxy": {
             "enabled": use_proxy,
-            "url": proxy_url
-        },
-        "data": {
-            "directory": data_dir,
-            "start_date": start_date
+            "url": proxy_url,
         },
         "watchlist": {
             "tech_giants": ["AAPL", "MSFT", "GOOGL", "AMZN", "META"],
             "ai_chips": ["NVDA", "AMD", "INTC"],
-            "my_stocks": []
+            "my_stocks": [],
         },
-        "update_schedule": {
-            "auto_update": False,
-            "update_time": "09:30"
-        }
     }
 
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=2, ensure_ascii=False)
+        yaml.safe_dump(config, f, allow_unicode=True, sort_keys=False)
 
     print("✓ 配置文件创建完成！")
 
@@ -95,7 +92,7 @@ def show_menu():
     print("AI 量化交易系统 - 快速启动")
     print("=" * 60)
     print("\n请选择启动模式:")
-    print("1. 启动 Web 界面 (Streamlit)")
+    print("1. 启动 FastAPI 后端")
     print("2. 快速下载示例数据 (AAPL, MSFT, NVDA, TSLA)")
     print("3. 自定义下载股票数据")
     print("4. 启动全流程管线 (v3 pipeline)")
@@ -173,14 +170,12 @@ def main():
         choice = show_menu()
 
         if choice == "1":
-            print("\n启动 Streamlit Web 界面...\n")
+            print("\n启动 FastAPI 后端...\n")
+            print("前端请在另一个终端运行: cd frontend-react && npm run dev\n")
             try:
                 import subprocess
                 subprocess.run([
-                    sys.executable, "-m", "streamlit", "run",
-                    str(PROJECT_ROOT / "frontend" / "app.py"),
-                    "--server.headless", "false",
-                    "--browser.gatherUsageStats", "false",
+                    sys.executable, str(PROJECT_ROOT / "run_api.py"),
                 ])
             except KeyboardInterrupt:
                 print("\n\n程序已退出")
@@ -205,9 +200,9 @@ def main():
         elif choice == "5":
             if CONFIG_PATH.exists():
                 with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-                    config = json.load(f)
+                    config = yaml.safe_load(f) or {}
                 print("\n当前配置:")
-                print(json.dumps(config, indent=2, ensure_ascii=False))
+                print(yaml.safe_dump(config, allow_unicode=True, sort_keys=False))
             else:
                 print("\n配置文件不存在，请先运行初始化")
 

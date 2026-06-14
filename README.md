@@ -6,7 +6,7 @@
 
 ```
 ┌──────────────────────────────────────────────┐
-│                 Frontend (Streamlit)           │
+│          Frontend (React) + Backend (FastAPI)  │
 ├──────────────────────────────────────────────┤
 │  层1: 信号层 (Supervised Learning)             │
 │  LightGBM / XGBoost / MLP / LSTM / GRU / TCN │
@@ -73,7 +73,7 @@
 
 ### Web 界面（Trading Terminal Noir 主题）
 - 11 个功能页面，完整量化工作流
-- 交互式 Plotly 图表
+- ECharts / lightweight-charts 交互图表
 - 专业暗色交易终端风格 UI
 
 ## 快速开始
@@ -87,17 +87,18 @@ pip install -r requirements.txt
 ### 2. 启动系统
 
 ```bash
-# 方式一：使用启动脚本（推荐）
-python run.py
+# 方式一：启动 FastAPI 后端
+python run_api.py
 
 # 方式二：快速启动菜单
 python scripts/quick_start.py
 
-# 方式三：直接启动 Streamlit
-streamlit run frontend/app.py
+# 方式三：启动 React 前端（另开终端）
+cd frontend-react
+npm run dev
 ```
 
-浏览器会自动打开 `http://localhost:8501`
+前端默认地址为 `http://127.0.0.1:5173`，后端默认地址为 `http://127.0.0.1:8000`。
 
 ### 3. 运行全流程管线
 
@@ -160,10 +161,8 @@ stock_data/
 
 ```
 StockTrader/
-├── frontend/                 # Streamlit 前端
-│   ├── app.py                # 主页面 (K线 + 快速预测)
-│   ├── v3_utils.py           # 主题引擎 + UI 组件库
-│   └── pages/                # 功能页面 (1-11)
+├── frontend-react/           # React + Vite 前端
+├── api/                      # FastAPI 后端
 ├── layers/                   # v3 分层量化系统
 │   ├── data/                 # 数据加载 (yfinance + 缓存)
 │   ├── features/             # 特征工程 (6组 50+ 因子)
@@ -185,7 +184,7 @@ StockTrader/
 ├── predictor.py              # XGBoost 概率预测 (快速分析)
 ├── advanced_predictor.py     # 增强预测器 (价格+趋势+持久化)
 ├── macd_strategy.py          # MACD 短线策略
-├── run.py                    # 启动脚本
+├── run_api.py                # FastAPI 后端启动脚本
 └── run_pipeline.py           # v3 全流程管线
 ```
 
@@ -218,4 +217,4 @@ The project now includes a front/back separated workbench:
 - Migration status: `MIGRATION_STATUS.md`
 - Final notes: `MIGRATION_FINAL_NOTES.md`
 
-The Streamlit application remains available as the legacy fallback via `python run.py`.
+The legacy frontend has been removed. Use `python run_api.py` for the backend and `npm run dev` under `frontend-react` for the frontend.

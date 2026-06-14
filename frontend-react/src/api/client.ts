@@ -111,6 +111,10 @@ export const api = {
     }),
   crossSectionUniverse: (limit = 300) => request<UniverseResponse>(`/api/cross-section/universe?limit=${limit}`),
   crossSectionLocalRank: (limit = 100) => request<CrossSectionRankResponse>(`/api/cross-section/local-rank?limit=${limit}`),
+  trainCrossSection: (limit = 100, modelType = "lightgbm", horizon = 5, forceRebuild = false) =>
+    request<JobResponse>(`/api/cross-section/train?limit=${limit}&model_type=${modelType}&horizon=${horizon}&force_rebuild=${forceRebuild}`, {
+      method: "POST"
+    }),
   crossSectionLocalBacktest: (limit = 100, longN = 10, shortN = 10) =>
     request<Record<string, unknown>>(`/api/cross-section/local-backtest?limit=${limit}&long_n=${longN}&short_n=${shortN}`, {
       method: "POST"

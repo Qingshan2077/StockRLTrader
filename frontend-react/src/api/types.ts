@@ -154,10 +154,17 @@ export interface UniverseResponse {
 export interface CrossSectionRankResponse {
   date?: string;
   count: number;
+  model_status?: string;
+  model_type?: string;
+  feature_count?: number;
+  message?: string;
+  columns?: string[];
   records: Record<string, unknown>[];
 }
 
 export interface CrossSectionFactorReportResponse {
   rank_ic: Record<string, unknown>[];
   factor_columns: string[];
+  factor_count?: number;
+  message?: string;
 }
