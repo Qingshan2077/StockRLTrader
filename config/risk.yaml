@@ -22,7 +22,7 @@ volatility:
 drawdown:
   enabled: true
   dynamic_deleverage: true      # 动态降仓
-  circuit_breaker: 0.20         # 熔断阈值 (回撤 20%)
+  circuit_breaker: -0.20        # 熔断阈值 (回撤 20%)
   deleverage_factor: 0.5        # 降仓因子 (降到 50%)
 
 liquidity:
