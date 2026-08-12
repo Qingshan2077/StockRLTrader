@@ -28,7 +28,9 @@ class RiskEngine:
 
     def __init__(self, config_loader=None):
         # 从 YAML 加载参数, 或使用默认值
-        risk_cfg = config_loader.get("risk", {}) if config_loader else {}
+        risk_cfg = self._load_risk_config(config_loader)
+        backtest_cfg = self._load_backtest_config(config_loader)
+
         pos_cfg = risk_cfg.get("position", {})
         vol_cfg = risk_cfg.get("volatility", {})
         dd_cfg = risk_cfg.get("drawdown", {})
@@ -61,12 +63,11 @@ class RiskEngine:
         self.reentry_penalty = risk_cfg.get("stop_loss", {}).get("reentry_penalty", 0.5)
         self.max_turnover = to_cfg.get("max_daily_turnover", 0.3)
 
-        bk_cfg = config_loader.get("backtest", {}) if config_loader else {}
-        impact_cfg = bk_cfg.get("market_impact", {})
+        impact_cfg = backtest_cfg.get("market_impact", {})
         self.cost_model = CostModel(
-            commission=bk_cfg.get("commission", 0.001),
-            slippage=bk_cfg.get("slippage", 0.0005),
-            tax=bk_cfg.get("tax", 0.0),
+            commission=backtest_cfg.get("commission", 0.001),
+            slippage=backtest_cfg.get("slippage", 0.0005),
+            tax=backtest_cfg.get("tax", 0.0),
             impact_model=impact_cfg.get("model", "sqrt"),
             k=impact_cfg.get("k", 0.1),
         )
@@ -75,6 +76,63 @@ class RiskEngine:
         self._stop_loss_triggered = False
         self._prev_position = 0.0
         self._peak_value = 0.0  # 追踪峰值净值用于动态回撤
+
+    @staticmethod
+    def _cfg_get(config_source, path: str, default=None):
+        """Read dotted config paths from ConfigLoader-like objects or dicts."""
+        if config_source is None:
+            return default
+
+        if isinstance(config_source, dict):
+            current = config_source
+            for key in path.split("."):
+                if not isinstance(current, dict) or key not in current:
+                    return default
+                current = current[key]
+            return current
+
+        getter = getattr(config_source, "get", None)
+        if callable(getter):
+            try:
+                return getter(path, default)
+            except TypeError:
+                pass
+
+        return default
+
+    @classmethod
+    def _load_risk_config(cls, config_loader):
+        """Support both nested risk.* and flat top-level risk config files."""
+        nested = cls._cfg_get(config_loader, "risk", {}) or {}
+        flat = {
+            "position": cls._cfg_get(config_loader, "position", {}),
+            "volatility": cls._cfg_get(config_loader, "volatility", {}),
+            "drawdown": cls._cfg_get(config_loader, "drawdown", {}),
+            "liquidity": cls._cfg_get(config_loader, "liquidity", {}),
+            "turnover": cls._cfg_get(config_loader, "turnover", {}),
+            "stop_loss": cls._cfg_get(config_loader, "stop_loss", {}),
+        }
+        if nested:
+            merged = dict(flat)
+            merged.update(nested)
+            return merged
+        return flat
+
+    @classmethod
+    def _load_backtest_config(cls, config_loader):
+        """Support both nested backtest.* and flat top-level backtest config files."""
+        nested = cls._cfg_get(config_loader, "backtest", {}) or {}
+        flat = {
+            "commission": cls._cfg_get(config_loader, "commission", 0.001),
+            "slippage": cls._cfg_get(config_loader, "slippage", 0.0005),
+            "tax": cls._cfg_get(config_loader, "tax", 0.0),
+            "market_impact": cls._cfg_get(config_loader, "market_impact", {}),
+        }
+        if nested:
+            merged = dict(flat)
+            merged.update(nested)
+            return merged
+        return flat
 
     def process(self, signal_score: float, current_price: float,
                 portfolio_value: float, current_volatility: float,

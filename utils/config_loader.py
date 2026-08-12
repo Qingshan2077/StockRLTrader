@@ -70,9 +70,64 @@ class ConfigLoader:
         for key, value in os.environ.items():
             if not key.startswith("QUANT_"):
                 continue
-            # QUANT_SEED=42 → system.seed = 42
-            config_path = key[6:].lower().replace("__", ".")
-            self._set_nested(self._config, config_path, self._cast_value(value))
+            config_path = self._resolve_env_path(key[6:])
+            if config_path:
+                self._set_nested(self._config, config_path, self._cast_value(value))
+
+    def _resolve_env_path(self, raw_key: str) -> Optional[str]:
+        """
+        Convert a QUANT_* environment key into a dotted config path.
+
+        Supported forms:
+          QUANT_system__data_dir -> system.data_dir
+          QUANT_system_data_dir  -> system.data_dir
+          QUANT_data_split_train_ratio -> data_split.train_ratio
+        """
+        normalized = raw_key.strip().lower()
+        if not normalized:
+            return None
+
+        aliases = {
+            "seed": "system.seed",
+            "data_dir": "system.data_dir",
+            "output_dir": "system.output_dir",
+            "log_dir": "system.log_dir",
+            "model_dir": "system.model_dir",
+            "data_provider": "market_data.provider",
+            "cache_format": "market_data.cache_format",
+            "log_level": "system.log_level",
+        }
+        if normalized in aliases:
+            return aliases[normalized]
+
+        if "__" in normalized:
+            return ".".join(part for part in normalized.split("__") if part)
+
+        tokens = [part for part in normalized.split("_") if part]
+        if not tokens:
+            return None
+
+        return self._match_config_path(tokens, self._config) or normalized
+
+    @staticmethod
+    def _match_config_path(tokens: list[str], current: Any) -> Optional[str]:
+        """Resolve underscore-separated tokens against existing config keys."""
+        if not tokens or not isinstance(current, dict):
+            return None
+
+        for end in range(len(tokens), 0, -1):
+            candidate = "_".join(tokens[:end])
+            if candidate not in current:
+                continue
+
+            if end == len(tokens):
+                return candidate
+
+            suffix = ConfigLoader._match_config_path(tokens[end:], current[candidate])
+            if suffix:
+                return f"{candidate}.{suffix}"
+
+        return None
 
     @staticmethod
     def _set_nested(d: dict, path: str, value: Any) -> None:
@@ -88,9 +143,9 @@ class ConfigLoader:
     def _cast_value(value: str) -> Any:
         """字符串 → Python 类型转换"""
         # bool
-        if value.lower() in ("true", "yes", "1"):
+        if value.lower() in ("true", "yes", "on"):
             return True
-        if value.lower() in ("false", "no", "0"):
+        if value.lower() in ("false", "no", "off"):
             return False
         # int
         try:
