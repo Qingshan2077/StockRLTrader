@@ -1,0 +1,14 @@
+:root {
+  --canvas: #101820;
+  --panel: #14212c;
+  --panel-high: #213341;
+  --input: #101d27;
+  --text: #e7edf2;
+  --muted: #9aa9b8;
+  --accent: #61d3ba;
+  --amber: #e5b567;
+  --line: #2b3d4b;
+  --display: Georgia, "Noto Serif SC", "Songti SC", serif;
+  --body: "Segoe UI", "Microsoft YaHei", sans-serif;
+  --mono: Consolas, "SFMono-Regular", monospace;
+}

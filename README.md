@@ -78,11 +78,10 @@ python -m pip install -r requirements-dev.txt
 python -m ruff check stockrl stockrl_app api run.py tests
 npm --prefix frontend-react run typecheck
 python -m pytest
-npm --prefix frontend-react test -- --run
-npm --prefix frontend-react run e2e
+npm --prefix frontend-react test
 ```
 
-上述动态验证命令本轮没有运行。静态检查不能验证训练、进程故障恢复、浏览器交互或打包后的行为；具体执行记录以新的验证报告为准，不能引用历史的 63 项测试结论覆盖本次重构。
+上述动态验证命令本轮没有运行。浏览器端到端与故障注入场景仍需后续实施验收；当前没有自动化 e2e 启动脚本。静态检查不能验证训练、进程故障恢复、浏览器交互或打包后的行为；具体执行记录以新的验证报告为准，不能引用历史的 63 项测试结论覆盖本次重构。
 
 ## 研究限制
 
