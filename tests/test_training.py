@@ -145,5 +145,3 @@ def test_replay_rejects_another_existing_run_without_changing_artifacts(tmp_path
     after = {path.relative_to(destination): path.read_bytes()
              for path in destination.rglob("*") if path.is_file()}
     assert after == before
-
-
