@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 import hashlib
 from importlib.metadata import version
 import json
-import math
 from pathlib import Path
 import platform
 from uuid import uuid4
@@ -13,30 +12,12 @@ import numpy as np
 import pandas as pd
 
 from stockrl.data import load_csv
+from stockrl.control import ExecutionControl
 from stockrl.env import TradingConfig, TradingEnv
 from stockrl.evaluation import baseline_policy, evaluate_policy
 from stockrl.features import ObservationNormalizer, build_features
 from stockrl.training import algorithm_class, load_bundle, train_agent
-
-
-def split_intervals(bars, train_ratio=.6, val_ratio=.2):
-    """Share only boundary observations, never a reward or execution interval."""
-    if not (0 < train_ratio < 1 and 0 < val_ratio < 1 and train_ratio + val_ratio < 1):
-        raise ValueError("train_ratio and val_ratio must be positive and sum to less than one")
-    rewards = len(bars) - 1
-    train_end = math.floor(rewards * train_ratio)
-    validation_end = train_end + math.floor(rewards * val_ratio)
-    if train_end < 20 or validation_end - train_end < 5 or rewards - validation_end < 5:
-        raise ValueError("Insufficient data: need at least 20 training, 5 validation and 5 test transitions")
-    result = {}
-    for name, start, end in (("train", 0, train_end),
-                             ("validation", train_end, validation_end),
-                             ("test", validation_end, rewards)):
-        result[name] = {"start": start, "end": end, "reward_count": end - start,
-                        "observation_start_date": pd.Timestamp(bars.index[start]).isoformat(),
-                        "first_reward_date": pd.Timestamp(bars.index[start + 1]).isoformat(),
-                        "last_reward_date": pd.Timestamp(bars.index[end]).isoformat()}
-    return result
+from stockrl.protocol import split_intervals as split_intervals
 
 
 def _json_clean(value):
@@ -83,7 +64,7 @@ def _aggregate(runs):
     return result
 
 
-def _test_agent(bars, config, normalizer, split, agent, folder):
+def _test_agent(bars, config, normalizer, split, agent, folder, control=None):
     def new_env():
         return TradingEnv(bars, config=config, normalizer=normalizer,
                           start=split["start"], end=split["end"])
@@ -94,15 +75,17 @@ def _test_agent(bars, config, normalizer, split, agent, folder):
 
     env = new_env()
     try:
-        result = _save_evaluation(evaluate_policy(env, policy), folder)
+        result = _save_evaluation(evaluate_policy(env, policy, control=control), folder)
     finally:
         env.close()
     result["baselines"] = {}
     for name in ("cash", "buy_hold", "half", "trend"):
+        if control:
+            control.check()
         env = new_env()
         try:
             result["baselines"][name] = _save_evaluation(
-                evaluate_policy(env, baseline_policy(name)), folder / "baselines" / name)
+                evaluate_policy(env, baseline_policy(name), control=control), folder / "baselines" / name)
         finally:
             env.close()
     return result
@@ -110,13 +93,15 @@ def _test_agent(bars, config, normalizer, split, agent, folder):
 
 def run_experiment(bars, output_dir, algorithm="PPO", timesteps=10000, seeds=(42,),
                    config=None, train_ratio=.6, val_ratio=.2, data_label="user_csv",
-                   episode_length=126, progress_callback=None):
+                   episode_length=126, progress_callback=None, control: ExecutionControl | None = None):
     """Train each seed, select on validation, evaluate each selected model once.
 
     ``output_dir`` is an artifact parent; the returned output_dir is a unique run
     directory. Callback receives dictionaries with event, seed and timesteps.
     Smoke runs verify the software, not investment performance.
     """
+    if control:
+        control.phase("preparing")
     algorithm = str(algorithm).upper()
     algorithm_class(algorithm)
     if isinstance(timesteps, bool) or not isinstance(timesteps, (int, np.integer)) or timesteps < 2:
@@ -159,7 +144,11 @@ def run_experiment(bars, output_dir, algorithm="PPO", timesteps=10000, seeds=(42
                          "Checkpoints selected only by validation mean reward; no test seed selection.",
                          "Annualization uses 252 sessions; Sharpe risk-free rate is zero.",
                          "Aggregate standard deviation uses population ddof=0."]}
-    for seed in seeds:
+    for seed_index, seed in enumerate(seeds):
+        if control:
+            control.emit({"event": "seed_start", "seed": seed, "seed_index": seed_index,
+                          "seed_count": len(seeds), "requested_steps": timesteps})
+            control.phase("training", seed=seed)
         folder = root / f"seed_{seed}"
         folder.mkdir()
         normalizer.save(folder / "normalizer.json")
@@ -177,17 +166,24 @@ def run_experiment(bars, output_dir, algorithm="PPO", timesteps=10000, seeds=(42
                               start=split["start"], end=split["end"])
 
         model, training = train_agent(training_factory, validation_factory, folder,
-                                     algorithm, timesteps, seed, progress_callback)
+                                     algorithm, timesteps, seed, progress_callback, control=control)
         _write_json(folder / "training.json", {"algorithm": algorithm, "seed": seed,
                     "config": asdict(config), "feature_names": list(features.columns),
                     "data_sha256": fingerprint, "splits": splits, **training})
-        result = _test_agent(bars, config, normalizer, splits["test"], model, folder)
+        if control:
+            control.phase("evaluating", seed=seed)
+        result = _test_agent(bars, config, normalizer, splits["test"], model, folder, control=control)
         result.update({"seed": seed, "model_path": str(folder / "model.zip"),
                        "normalizer_path": str(folder / "normalizer.json"),
                        "validation_path": str(folder / "evaluations.npz"), **training})
         summary["runs"].append(result)
+        if control:
+            control.emit({"event": "seed_complete", "seed": seed, "seed_index": seed_index,
+                          "timesteps": training["actual_timesteps"]})
         if progress_callback:
             progress_callback({"event": "seed_complete", "seed": seed, "timesteps": training["actual_timesteps"]})
+    if control:
+        control.phase("publishing")
     summary["aggregate"] = _aggregate(summary["runs"])
     summary = _json_clean(summary)
     _write_json(root / "summary.json", summary)
@@ -196,13 +192,15 @@ def run_experiment(bars, output_dir, algorithm="PPO", timesteps=10000, seeds=(42
     return summary
 
 
-def evaluate_saved_run(run_dir, output_dir=None):
+def evaluate_saved_run(run_dir, output_dir=None, *, control: ExecutionControl | None = None):
     """Replay saved test intervals without training, tuning or refitting anything.
 
     A run folder can be moved: models, data and normalizers are resolved relative
     to it, independently of the original absolute artifact paths in its summary.
     An explicit output directory must be fresh; existing artifacts are preserved.
     """
+    if control:
+        control.phase("preparing")
     root = Path(run_dir).expanduser().resolve()
     if root.name == "summary.json":
         root = root.parent
@@ -219,15 +217,23 @@ def evaluate_saved_run(run_dir, output_dir=None):
     except FileExistsError as exc:
         raise ValueError("Evaluation output already exists; choose a fresh destination") from exc
     runs = []
-    for saved in summary["runs"]:
+    for seed_index, saved in enumerate(summary["runs"]):
+        if control:
+            control.emit({"event": "seed_start", "seed": saved["seed"], "seed_index": seed_index,
+                          "seed_count": len(summary["runs"])})
+            control.phase("evaluating", seed=saved["seed"])
         folder = root / f"seed_{saved['seed']}"
         bundle = load_bundle(folder / "model.zip")
         result = _test_agent(bars, bundle.config, bundle.normalizer, summary["splits"]["test"],
-                             bundle.agent, destination / folder.name)
+                             bundle.agent, destination / folder.name, control=control)
         result.update({"seed": saved["seed"], "model_path": str(folder / "model.zip"),
                        "normalizer_path": str(folder / "normalizer.json"),
                        "checkpoint_selection": saved["checkpoint_selection"]})
         runs.append(result)
+        if control:
+            control.emit({"event": "seed_complete", "seed": saved["seed"], "seed_index": seed_index})
+    if control:
+        control.phase("publishing")
     replay = {**summary, "source_run_dir": str(root), "output_dir": str(destination),
               "data_path": str(data_path), "evaluation_only": True,
               "runs": runs, "aggregate": _aggregate(runs)}

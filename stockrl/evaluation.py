@@ -21,9 +21,13 @@ def baseline_policy(name):
     return policy
 
 
-def evaluate_policy(env,policy):
+def evaluate_policy(env,policy,*,control=None):
+    if control:
+        control.check()
     obs,_ = env.reset()
     while True:
+        if control:
+            control.check()
         obs,_,terminated,truncated,_ = env.step(policy(obs,env))
         if terminated or truncated: break
     history = [dict(row) for row in env.history]

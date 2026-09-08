@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Callable
 
+import gymnasium as gym
 import numpy as np
 from stable_baselines3 import PPO, SAC
 from stable_baselines3.common.callbacks import EvalCallback
@@ -13,6 +14,7 @@ import torch
 
 from stockrl.env import TradingConfig
 from stockrl.features import ObservationNormalizer
+from stockrl.control import ExecutionControl
 
 
 def algorithm_class(algorithm):
@@ -50,6 +52,22 @@ def load_bundle(model_path):
                        TradingConfig(**metadata["config"]), metadata)
 
 
+class ControlledEnv(gym.Wrapper):
+    """Check cancellation during SB3 validation, without changing observations."""
+
+    def __init__(self, env, control: ExecutionControl):
+        super().__init__(env)
+        self.control = control
+
+    def reset(self, **kwargs):
+        self.control.check()
+        return self.env.reset(**kwargs)
+
+    def step(self, action):
+        self.control.check()
+        return self.env.step(action)
+
+
 class ValidationCheckpoint(EvalCallback):
     """Select using fixed validation episodes, including the final updated policy.
 
@@ -57,34 +75,49 @@ class ValidationCheckpoint(EvalCallback):
     at its first rollout. Skip pre-optimization checks and always evaluate after
     the final optimization; validation is the sole checkpoint criterion.
     """
-    def __init__(self, *args, progress_callback=None, seed=None, **kwargs):
+    def __init__(self, *args, progress_callback=None, seed=None, control=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.progress_callback = progress_callback
         self.experiment_seed = seed
+        self.control = control
 
     def _on_step(self):
+        if self.control:
+            self.control.emit({"event": "training", "seed": self.experiment_seed,
+                               "timesteps": self.num_timesteps}, progress=True)
         if self.progress_callback and self.n_calls % self.eval_freq == 0:
             self.progress_callback({"event": "training", "seed": self.experiment_seed,
                                     "timesteps": self.num_timesteps})
         if self.model._n_updates == 0:
             return True
-        return super()._on_step()
+        evaluating = self.n_calls % self.eval_freq == 0
+        if self.control and evaluating:
+            self.control.phase("validating", seed=self.experiment_seed)
+        result = super()._on_step()
+        if self.control and evaluating:
+            self.control.phase("training", seed=self.experiment_seed)
+        return result
 
     def _on_training_end(self):
+        if self.control:
+            self.control.phase("validating", seed=self.experiment_seed)
         self.n_calls += (-self.n_calls) % self.eval_freq
         super()._on_step()
 
 
 def train_agent(train_env_factory: Callable, validation_env_factory: Callable,
-                seed_dir, algorithm, timesteps, seed, progress_callback=None):
+                seed_dir, algorithm, timesteps, seed, progress_callback=None,
+                control: ExecutionControl | None = None):
     """Return the validation-selected policy; never receives a test environment."""
     learner = algorithm_class(algorithm)
     torch.set_num_threads(1)
     torch.use_deterministic_algorithms(True)
     set_random_seed(seed, using_cuda=False)
     seed_dir = Path(seed_dir)
-    train_env = Monitor(train_env_factory())
-    validation_env = Monitor(validation_env_factory())
+    train_base = train_env_factory()
+    validation_base = validation_env_factory()
+    train_env = Monitor(ControlledEnv(train_base, control) if control else train_base)
+    validation_env = Monitor(ControlledEnv(validation_base, control) if control else validation_base)
     common = dict(policy="MlpPolicy", env=train_env, seed=seed, device="cpu",
                   verbose=0, policy_kwargs={"net_arch": [32, 32]})
     if learner is PPO:
@@ -102,9 +135,11 @@ def train_agent(train_env_factory: Callable, validation_env_factory: Callable,
     callback = ValidationCheckpoint(validation_env, best_model_save_path=str(seed_dir),
                                     log_path=str(seed_dir), eval_freq=max(1, min(2048, timesteps // 4)),
                                     n_eval_episodes=1, deterministic=True, verbose=0,
-                                    progress_callback=progress_callback, seed=seed)
+                                    progress_callback=progress_callback, seed=seed, control=control)
     try:
         model.learn(total_timesteps=timesteps, callback=callback)
+        if control:
+            control.check()
         best = seed_dir / "best_model.zip"
         if not best.exists():
             raise RuntimeError("Training did not produce a validation-selected checkpoint")
