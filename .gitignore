@@ -1,17 +1,17 @@
-*.log
-*.idea
-*.jbeval
-*.claude
-*.streamlit
-*.txt
-
-data/
-docs/
-stock_data/
-results/
 __pycache__/
-
-# 忽略所有 .md 文件
-*.md
-# 但不忽略 README.md 文件
-!README.md
+*.py[cod]
+*.log
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+.idea/
+.vscode/
+.env
+outputs/
+models/
+results/
+*.egg-info/
+build/
+dist/
