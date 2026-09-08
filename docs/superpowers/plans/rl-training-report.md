@@ -39,3 +39,12 @@ C:/Users/111/Desktop/StockRLTrader/.venv/Scripts/python.exe -m pytest tests/test
 The tests cover real PPO and SAC gradient updates/save/load, validation-selected checkpoint evidence, exact moved-directory replay metrics, same-policy reload NAV, cash baseline and test dates, immutable preprocessing under validation/test changes, identical trained policies and validation traces under future-test perturbation, three-seed aggregate inclusion, tiny/invalid split rejection, and saved market tamper detection. All artifacts use isolated pytest temporary output directories.
 
 Smoke runs demonstrate software operation only; they provide no evidence of profitability. No commit, frontend/CLI edit, or external action was made by this task.
+
+## Round 1 review corrections
+
+Two P2 regressions were independently reproduced with real integrations before fixes:
+
+- A PPO budget of 148 produced a raw rollout of 37, which has no batch divisor in 2..32. The red regression failed with `ValueError: max() iterable argument is empty`. Rollouts are now rounded down to an even number, retaining the 2..128 rollout and 2..32 batch bounds while guaranteeing a valid divisor. The regression trains for the requested budget, checks actual gradient updates, and loads a trained selected checkpoint. Its isolated green run passed in 7.04 seconds.
+- A replay pointed at another existing experiment directory overwrote its summary and evaluation files. The red regression failed with `DID NOT RAISE ValueError`. Replay now creates a fresh destination atomically with `exist_ok=False` and translates any collision into a clear `ValueError` before artifact writes. The regression snapshots every file in an actual second experiment and verifies all bytes and paths remain unchanged. Its isolated green run passed in 7.03 seconds.
+
+Final covering command: `C:/Users/111/Desktop/StockRLTrader/.venv/Scripts/python.exe -m pytest tests/test_training.py -q --noconftest` — **11 passed in 12.61 seconds**, with no warnings. These corrections touched only the two owned modules, training tests, and this report; no commit was made. Explicit replay output now requires a previously nonexistent directory.

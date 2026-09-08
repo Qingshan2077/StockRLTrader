@@ -89,6 +89,9 @@ def train_agent(train_env_factory: Callable, validation_env_factory: Callable,
                   verbose=0, policy_kwargs={"net_arch": [32, 32]})
     if learner is PPO:
         rollout = max(2, min(128, timesteps // 4))
+        # An even rollout always admits batch size two, including budgets whose
+        # raw rollout would be a prime larger than the bounded batch limit.
+        rollout -= rollout % 2
         batch = max(size for size in range(2, min(32, rollout) + 1) if rollout % size == 0)
         model = learner(**common, n_steps=rollout, batch_size=batch, n_epochs=4)
     else:

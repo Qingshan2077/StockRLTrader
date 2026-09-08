@@ -122,3 +122,28 @@ def test_saved_bundle_can_move_and_replay_cannot_overwrite_source(tmp_path):
     assert replay["runs"][0]["metrics"] == result["runs"][0]["metrics"]
 
 
+def test_ppo_budget_with_prime_rollout_above_batch_limit_trains(tmp_path):
+    from stockrl.experiments import run_experiment
+    from stockrl.training import load_agent
+    # 148 // 4 = 37: no divisor in 2..32, previously failed before learning.
+    result = run_experiment(market(), tmp_path, timesteps=148, seeds=(7,), episode_length=8)
+    run = result["runs"][0]
+    assert run["actual_timesteps"] >= 148
+    assert run["gradient_updates"] > 0
+    assert load_agent(run["model_path"])._n_updates > 0
+
+
+def test_replay_rejects_another_existing_run_without_changing_artifacts(tmp_path):
+    from stockrl.experiments import run_experiment, evaluate_saved_run
+    source = run_experiment(market(), tmp_path / "source", timesteps=4, seeds=(7,), episode_length=8)
+    other = run_experiment(market(), tmp_path / "other", timesteps=4, seeds=(7,), episode_length=8)
+    destination = Path(other["output_dir"])
+    before = {path.relative_to(destination): path.read_bytes()
+              for path in destination.rglob("*") if path.is_file()}
+    with pytest.raises(ValueError, match="exist|fresh"):
+        evaluate_saved_run(source["output_dir"], destination)
+    after = {path.relative_to(destination): path.read_bytes()
+             for path in destination.rglob("*") if path.is_file()}
+    assert after == before
+
+

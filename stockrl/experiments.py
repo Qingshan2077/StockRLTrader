@@ -201,6 +201,7 @@ def evaluate_saved_run(run_dir, output_dir=None):
 
     A run folder can be moved: models, data and normalizers are resolved relative
     to it, independently of the original absolute artifact paths in its summary.
+    An explicit output directory must be fresh; existing artifacts are preserved.
     """
     root = Path(run_dir).expanduser().resolve()
     if root.name == "summary.json":
@@ -213,7 +214,10 @@ def evaluate_saved_run(run_dir, output_dir=None):
     destination = Path(output_dir).expanduser().resolve() if output_dir else root / ("evaluation-" + uuid4().hex[:8])
     if destination == root:
         raise ValueError("Evaluation output must differ from the source run directory")
-    destination.mkdir(parents=True, exist_ok=True)
+    try:
+        destination.mkdir(parents=True, exist_ok=False)
+    except FileExistsError as exc:
+        raise ValueError("Evaluation output already exists; choose a fresh destination") from exc
     runs = []
     for saved in summary["runs"]:
         folder = root / f"seed_{saved['seed']}"
