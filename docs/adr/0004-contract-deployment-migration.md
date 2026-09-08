@@ -1,6 +1,6 @@
 # ADR-0004：契约协作、同源交付与渐进迁移
 
-- 日期：2026-09-08；状态：Proposed。
+- 日期：2026-09-08；状态：Accepted for implementation，依据后续开发指令；契约生成及最终入口清理调整见 [ADR-0006](0006-static-only-implementation.md)。
 - 关联：[Spec FR-09/10 与 HTTP 契约](../superpowers/specs/2026-09-08-react-fastapi-design.md)、[Plan](../superpowers/plans/2026-09-08-react-fastapi.md)。
 
 ## 背景

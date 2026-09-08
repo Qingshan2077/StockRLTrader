@@ -1,0 +1,1 @@
+.[web,market,test,static]

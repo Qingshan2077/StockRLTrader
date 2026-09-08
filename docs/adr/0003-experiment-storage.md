@@ -1,6 +1,6 @@
 # ADR-0003：SQLite 元数据与不可变文件产物
 
-- 日期：2026-09-08；状态：Proposed。
+- 日期：2026-09-08；状态：Accepted for implementation，依据后续开发指令；动态验收未执行，见 [ADR-0006](0006-static-only-implementation.md)。
 - 关联：[Spec FR-01/02/06/08](../superpowers/specs/2026-09-08-react-fastapi-design.md)、[ADR-0002](0002-local-job-lifecycle.md)。
 
 ## 背景

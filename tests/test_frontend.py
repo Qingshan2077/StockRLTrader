@@ -4,7 +4,9 @@ from pathlib import Path
 import shutil
 
 import pandas as pd
-from streamlit.testing.v1 import AppTest
+import pytest
+
+AppTest = pytest.importorskip("streamlit.testing.v1", reason="legacy UI is an optional extra").AppTest
 
 
 APP = Path(__file__).parents[1] / "frontend" / "app.py"

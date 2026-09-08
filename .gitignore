@@ -17,3 +17,8 @@ results/
 *.egg-info/
 build/
 dist/
+node_modules/
+/api/static/
+*.tsbuildinfo
+playwright-report/
+test-results/

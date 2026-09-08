@@ -1,7 +1,7 @@
 # ADR-0001：React + FastAPI 与研究核心的边界
 
 - 日期：2026-09-08。
-- 状态：Proposed。用户已确定 React + FastAPI 方向；本文的组件划分与配套选型待审阅。
+- 状态：Accepted for implementation。用户后续授权按计划开发；本次执行边界见 [ADR-0006](0006-static-only-implementation.md)，不表示动态验收通过。
 - 关联：[Spec §3](../superpowers/specs/2026-09-08-react-fastapi-design.md)、[Review R-04/R-06/R-09](../reviews/2026-09-08-react-fastapi-review.md)。
 
 ## 背景

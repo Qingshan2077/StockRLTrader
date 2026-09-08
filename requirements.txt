@@ -1,9 +1,2 @@
-numpy>=1.26,<3
-pandas>=2.2,<3
-gymnasium>=1.0,<2
-stable-baselines3>=2.7,<3
-torch>=2.3,<3
-streamlit>=1.63,<2
-plotly>=5.24,<7
-yfinance>=0.2.54,<2
-pytest>=8,<10
+# Source install. Runtime compatibility has not been exercised in this migration.
+.[web,market]

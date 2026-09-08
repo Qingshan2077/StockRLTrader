@@ -1,129 +1,89 @@
 # StockRLTrader
 
-StockRLTrader 是一个独立的强化学习交易研究项目。智能体直接根据截至当日收盘的行情和账户状态决定目标仓位，不需要监督学习预测值。第一版只处理日线、单资产、只做多、不融资的本地实验，不连接券商，也不执行实盘交易。
+独立的强化学习交易研究项目：智能体观察历史行情和账户状态，自主决定目标仓位。当前开发分支将 Web 工作流迁移为 **React + TypeScript + FastAPI + 独立 worker**，保留 Python 研究核心和离线 CLI。
 
-## 安装
+> 此次迁移按用户要求仅编写代码和进行静态检查。没有运行构建、测试、训练或服务；运行兼容性与策略有效性均未验证。下面的命令供后续获得运行授权或用户自行使用，启动器不会自动构建。
 
-需要 Python 3.12 或更高版本。建议使用虚拟环境：
+## 代码结构
 
-```bash
+| 目录 | 职责 |
+|---|---|
+| `frontend-react/` | 中文实验界面、数据准备、任务状态、曲线和比较 |
+| `api/` | `/api/v1` HTTP 契约、错误与本地访问限制 |
+| `stockrl_app/` | 不可变数据集、SQLite 元数据、幂等请求、任务与产物管理 |
+| `stockrl_app/jobs/` | 独立协调进程、一个计算子进程、取消和恢复 |
+| `stockrl/` | 数据、因果特征、TradingEnv、PPO/SAC、评估与重放 |
+| `frontend/` | 可选的旧 Streamlit 入口，等待动态迁移验收后退出 |
+
+设计、架构决定和任务计划见 [协作文档](docs/README.md)，运行方式见 [本地开发](docs/operations/local-development.md)，数据迁移与故障处理见 [维护说明](docs/operations/migration-recovery.md)。
+
+## 后续安装与启动
+
+需要 Python 3.12+。构建前端需要 Node.js 22.12+；构建后的界面由 FastAPI 提供，无需常驻 Node 服务。
+
+```powershell
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
+npm --prefix frontend-react install --ignore-scripts
+npm --prefix frontend-react run build
+.venv\Scripts\python.exe run.py
 ```
 
-后续 Windows 示例中的 `python` 可以直接替换为 `.venv\Scripts\python.exe`，无需激活脚本。Linux 或 macOS 请使用 `.venv/bin/python`。
+默认地址为 `http://127.0.0.1:8000`。`run.py` 检查前端构建并启动 API 和独立 worker；缺少构建会给出说明，绝不自动安装或构建。关闭浏览器不会取消任务；退出启动器会请求停止正在执行的任务。默认单机单用户，一个训练/重放任务执行，其余排队，不连接券商。
 
-## 三种命令行工作流
+可分别启动 API、worker 和 Vite 进行开发，具体步骤见维护文档。Web 依赖位于 `.[web]`；Yahoo 下载位于 `.[market]`；旧界面位于 `.[legacy]`。仅使用核心 CLI 时可安装 `.`，不需要 Streamlit、API 或 worker。
 
-下面的演示会生成明确标注的合成行情并运行一个 PPO 实验。短训练只用于确认软件能够运行，不能证明策略有效：
+## 离线 CLI
 
-```bash
+```powershell
 python -m stockrl demo --timesteps 10000 --seeds 42 43 44 --output outputs/experiments
-```
-
-使用本地 CSV 训练：
-
-```bash
-python -m stockrl train --csv stock_data/AAPL_raw.csv --algorithm PPO --timesteps 10000 --seeds 42 43 44
-```
-
-CSV 必须包含 `Date,Open,High,Low,Close,Volume`。日期应唯一且递增；日线输入的同一个日历日只能出现一行，即使时间戳不同也会拒绝。价格必须为有限正数，成交量不能为负。程序不会猜测复权方式；请确保开高低收使用一致的复权、分红和拆股口径。可用 `--start` 和 `--end` 截取日期。
-
-Yahoo 下载是一个可选便利入口，需要网络连接，不是训练本身的依赖：
-
-```bash
-python -m stockrl train --ticker AAPL --start 2018-01-01 --end 2025-01-01 --timesteps 10000
-```
-
-对一个已完成实验进行原样重放，不再训练、归一化或选模：
-
-```bash
+python -m stockrl train --csv stock_data/AAPL_raw.csv --algorithm PPO --timesteps 10000
+python -m stockrl train --ticker AAPL --start 2018-01-01 --end 2025-01-01
 python -m stockrl evaluate outputs/experiments/<run-id>
+python run_pipeline.py --help
 ```
 
-查看全部参数：
+CLI 保持直接执行，不经过 Web 队列。不要把同时启动多个 CLI 重任务理解为队列能够控制的并发。Yahoo 下载为可选网络入口，CSV 与合成演示可离线使用。
 
-```bash
-python -m stockrl --help
-python -m stockrl demo --help
-python -m stockrl train --help
-python -m stockrl evaluate --help
-```
+CSV 必须包含 `Date,Open,High,Low,Close,Volume`，日期唯一且递增、每个日历日最多一行，价格有限正数且 OHLC 合法，成交量非负。程序不猜测复权、分红、拆股或计价单位，也不静默修复行情。
 
-旧的启动文件仍可作为薄入口使用，所有实验逻辑都由同一个 API 执行：
+## 研究规则
 
-```bash
-python run_pipeline.py demo --timesteps 10000
-python run.py
-```
+- 日线、单资产、只做多、不融资、不卖空。观察 t 收盘，动作在下一交易行开盘执行，并按该行收盘估值。
+- 动作 `[-1,1]` 映射到目标仓位 `[0,1]`。现金、整手、滑点、佣金、卖出税和历史成交量参与率由同一个 TradingEnv 执行；费用只计入净值一次。
+- 基础奖励为扣费后的对数净值变化；保留已有可选回撤/换手惩罚，不新增奖励策略。数据尾部按市值截断，不虚构清仓。
+- 默认训练/验证/测试比例为 60%/20%/20%，收益区间互不重叠；归一化只拟合训练段，验证选择检查点，测试不挑选模型或 seed。
+- PPO 与 SAC 使用相同环境。多个 seed 都要报告；不同随机种子不能代替不同市场时期的检验。
 
-`python run.py` 会用当前 Python 启动 Streamlit。界面包含“数据与环境”“训练实验”“结果对比”三个区域，可载入合成演示数据、上传 CSV 或读取 `stock_data` 中的本地原始行情。实验默认保存到 `outputs/experiments`；可在启动前设置 `STOCKRL_OUTPUT_DIR` 改变目录。
+## 结果与基准
 
-## 时间顺序与账户假设
+保存模型、归一化、数据指纹、切分、版本、验证记录、逐日净值和成交。新应用增加不可变请求、manifest 和持久任务状态，核心目录继续兼容既有 CLI 格式。重放使用保存的模型与数据，生成独立结果，不是新的样本外证据。
 
-时刻 t 的观察只包含截至 t 收盘的信息，动作在 t+1 开盘成交，并按 t+1 收盘估值。动作 `[-1, 1]` 线性映射为目标仓位 `[0, 1]`。交易环境统一记录现金、持股、滑点、手续费、卖出税和净值，费用只扣一次；现金不能透支，也不允许卖空。
+四个基准为现金、持续满仓请求、固定半仓和均线择时。`buy_hold` 实际含义是持续请求 100% 仓位，受现金/参与率约束时后续继续买入，不主动卖出。所有基准与 RL 使用同一评估区间、费用和交易限制。
 
-数据按日期分为训练、验证和测试收益区间，默认比例为 60% / 20% / 20%。归一化参数只拟合训练区间，验证区间只选择检查点，测试区间只在选择完成后评估一次。三个区间可以共享边界观察行，但不共享任何成交或收益区间。数据尾部按市值截断，不虚构清仓交易。
+报表包括净收益、年化收益、年化波动、Sharpe、最大回撤、累计换手、费用、平均仓位和交易笔数。年化使用 252 个交易日、Sharpe 使用零无风险利率；未定义指标保存为 null。图表抽样不改变全量指标，CSV 下载保留原始行。
 
-流动性上限使用决策时已知的历史成交量。`lot_size`、最低佣金和次日可卖约束是简化的日线规则，不代表完整交易所撮合、盘口排队或市场冲击模型。
+## 数据与版本管理
 
-## 基准、指标与产物
+应用状态默认保存于 `outputs/app/state.sqlite3`，数据快照位于 `outputs/app/datasets/`，实验文件位于 `outputs/experiments/`。可通过 `STOCKRL_APP_DIR` 和 `STOCKRL_OUTPUT_DIR` 配置启动时根目录。只支持本机磁盘，不使用网络共享文件夹存 SQLite 或锁。
 
-每个随机种子的测试区间都会使用同一个交易环境运行四个基准：
+`stock_data/`、历史导出 CSV、根目录旧 `experiments.db` 和原实验均保留；旧数据库不会作为新应用数据库打开。历史 RL 目录通过显式维护命令只读导入，不自动将旧业务记录转为研究证据。
 
-- 现金：目标仓位始终为 0%。
-- 买入持有：目标仓位持续为 100%；受参与率或现金限制时会在之后的交易日继续买入，不会主动卖出。
-- 固定半仓：目标仓位持续为 50%。
-- 均线择时：收盘价高于最近 20 个可用交易日均线时目标为 100%，否则为 0%。
+正式协作文档在 `docs/`；不希望上传的笔记在 `docs1/`，由 Git 忽略。此次代码保存在独立工作树和本地分支，未推送远端。
 
-结果报告净收益、年化收益、年化波动、Sharpe、最大回撤、累计换手、交易费用、平均仓位和成交笔数。Sharpe 使用 252 个交易日和 0 无风险利率；无波动或数据不足的指标保存为 `null`，不会伪装成 0。
+## 后续验证
 
-每次实验都会保存：
-
-```text
-outputs/experiments/<run-id>/
-├── summary.json
-├── bars.csv
-└── seed_<seed>/
-    ├── model.zip
-    ├── normalizer.json
-    ├── history.csv
-    ├── trades.csv
-    └── baselines/
-```
-
-`summary.json` 还记录数据 SHA256、配置、日期切分、依赖版本、随机种子和验证检查点信息。多个种子只报告测试指标的均值和总体标准差，不根据测试成绩挑选“最佳种子”。
-
-## Python API
-
-```python
-from stockrl.data import load_csv
-from stockrl.experiments import run_experiment, evaluate_saved_run
-
-bars = load_csv("stock_data/AAPL_raw.csv")
-summary = run_experiment(
-    bars,
-    "outputs/experiments",
-    algorithm="PPO",
-    timesteps=10_000,
-    seeds=(42, 43, 44),
-    data_label="csv:AAPL_raw.csv",
-)
-replay = evaluate_saved_run(summary["output_dir"])
-```
-
-核心接口还包括 `TradingEnv`、`TradingConfig`、`ObservationNormalizer`、`evaluate_policy`、`baseline_policy` 和 `load_bundle`。PPO 是默认算法，SAC 用于对照；两者共用完全相同的数据、账户与评估路径。
-
-## 验证
-
-```bash
+```powershell
+python -m pip install -r requirements-dev.txt
+python -m ruff check stockrl stockrl_app api run.py tests
+npm --prefix frontend-react run typecheck
 python -m pytest
+npm --prefix frontend-react test -- --run
+npm --prefix frontend-react run e2e
 ```
 
-测试覆盖资金守恒、下一开盘成交、隔夜收益归属、费用、卖出回款、整手和流动性限制、因果特征、环境截断、PPO/SAC 真实训练、保存加载一致性、CLI 及 Streamlit 启动。
+上述动态验证命令本轮没有运行。静态检查不能验证训练、进程故障恢复、浏览器交互或打包后的行为；具体执行记录以新的验证报告为准，不能引用历史的 63 项测试结论覆盖本次重构。
 
 ## 研究限制
 
-本项目用于研究和软件验证，不构成投资建议。回测收益不能代表未来表现。日线撮合忽略盘口、排队、精细市场冲击和许多交易所规则；Yahoo 或用户 CSV 的数据质量、复权方式和幸存者偏差会直接影响结果。训练步数很短的烟雾实验仅说明代码可执行。
-
-当前版本用独立的 `stockrl/` 研究栈替代了旧的监督学习预测、分层信号、旧风控执行和多页面入口。仓库保留 `stock_data/` 中的市场文件、根目录历史导出 CSV、`experiments.db`、LICENSE 和 Git 历史；这些旧产物不会自动转化为新 RL 实验的证据。当前实现仅支持逐只股票的日线实验，不声称支持多资产组合或盘中交易。
+这是 RL 研究和软件验证工具。短训练与漂亮的收益曲线不证明策略有效；单资产、长仓收益可能来自市场上涨，较低回撤可能只是较低持仓。当前仍缺少完整市场机制、风险匹配基准、滚动样本外研究和跨资产泛化验证。日线 T+1/整手规则不是完整交易所撮合，Yahoo/CSV 的复权和数据质量也会影响结果。框架迁移不构成投资建议或实盘能力。
