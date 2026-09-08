@@ -11,6 +11,7 @@ venv/
 .vscode/
 .env
 outputs/
+/docs1/
 models/
 results/
 *.egg-info/
