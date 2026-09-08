@@ -131,7 +131,13 @@ class TradingEnv(gym.Env):
         execution = decision+1
         open_price = float(self.bars.Open.iloc[execution])
         open_nav = self.cash+self.shares*open_price
-        desired = math.floor(requested*open_nav/open_price/cfg.lot_size + 1e-12)*cfg.lot_size
+        if requested == 1.0:
+            # Keep already-owned integer shares out of floating-point division:
+            # a full-allocation request can only add cash-funded whole lots.
+            additional_lots = math.floor(self.cash/open_price/cfg.lot_size)
+            desired = self.shares + additional_lots*cfg.lot_size
+        else:
+            desired = math.floor(requested*open_nav/open_price/cfg.lot_size + 1e-12)*cfg.lot_size
         delta = desired-self.shares
         historical_volume = float(self.bars.Volume.iloc[max(0,decision-19):decision+1].mean())
         capacity = math.floor(historical_volume*cfg.max_participation/cfg.lot_size)*cfg.lot_size

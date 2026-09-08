@@ -34,7 +34,10 @@ def evaluate_policy(env,policy):
     volatility = float(returns.std(ddof=1)*np.sqrt(252)) if periods > 1 else None
     sharpe = float(returns.mean()*252/volatility) if volatility is not None and volatility > 1e-12 else None
     net_return = float(nav[-1]/nav[0]-1) if len(nav)>1 else None
-    annualized = float(np.expm1(np.log(nav[-1]/nav[0])*252/periods)) if periods and nav[-1]>0 else (-1. if periods else None)
+    annualized = -1. if periods else None
+    if periods and nav[-1] > 0:
+        exponent = (math.log(nav[-1])-math.log(nav[0]))*252/periods
+        annualized = math.expm1(exponent) if exponent <= math.log(np.finfo(float).max) else None
     metrics = {'total_return':net_return,'annualized_return':annualized,'volatility':volatility,
         'sharpe':sharpe,'max_drawdown':float(np.max(1-nav/np.maximum.accumulate(nav))),
         'total_turnover':float(sum(row['turnover'] for row in history)),

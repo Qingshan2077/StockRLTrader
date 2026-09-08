@@ -44,3 +44,29 @@ def test_buy_hold_does_not_sell_after_gap_when_rounding_left_cash():
     result = evaluate_policy(env, baseline_policy('buy_hold'))
     assert [row['shares'] for row in result['history']] == [0,166,166]
     assert len(result['trades']) == 1
+
+
+def test_buy_hold_preserves_million_shares_despite_float_roundoff():
+    frame = pd.DataFrame({'Open':[.01,.01,.07], 'High':[.01,.01,.07],
+        'Low':[.01,.01,.07], 'Close':[.01,.01,.07], 'Volume':[100000000]*3},
+        index=pd.date_range('2024-01-01', periods=3, name='Date'))
+    env = TradingEnv(frame,TradingConfig(commission=0,slippage=0,max_participation=1))
+    result = evaluate_policy(env,baseline_policy('buy_hold'))
+    assert [row['shares'] for row in result['history']] == [0,1000000,1000000]
+    assert len(result['trades']) == 1
+    assert result['history'][-1]['cash'] == 0
+
+
+def test_explosive_single_period_annualization_is_null_without_warning():
+    import warnings
+    frame = pd.DataFrame({'Open':[100,100], 'High':[100,2000],
+        'Low':[100,100], 'Close':[100,2000], 'Volume':[100000]*2},
+        index=pd.date_range('2024-01-01', periods=2, name='Date'))
+    env = TradingEnv(frame,TradingConfig(commission=0,slippage=0,max_participation=1))
+    with warnings.catch_warnings():
+        warnings.simplefilter('error',RuntimeWarning)
+        result = evaluate_policy(env,baseline_policy('buy_hold'))
+    assert result['metrics']['total_return'] == 19
+    assert result['metrics']['annualized_return'] is None
+    assert result['metrics']['volatility'] is None
+    assert result['metrics']['sharpe'] is None

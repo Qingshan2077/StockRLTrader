@@ -167,3 +167,10 @@ def test_invalid_actions_rejected_without_advancing(action):
     env.reset()
     with pytest.raises(ValueError): env.step(action)
     assert env.current_step == 0 and len(env.history) == 1
+
+
+def test_environment_rejects_intraday_rows_before_any_t_plus_one_trade():
+    frame = bars()
+    frame.index = pd.date_range('2024-01-01 09:00',periods=4,freq='h',name='Date')
+    with pytest.raises(ValueError,match='calendar day|daily'):
+        TradingEnv(frame,config(t_plus_one=True))

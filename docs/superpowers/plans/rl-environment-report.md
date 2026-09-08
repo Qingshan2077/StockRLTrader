@@ -37,3 +37,22 @@ Target shares are computed from pre-trade open NAV, then restricted by whole lot
 Capacity uses the trailing 20 volumes through decision close. Next day's volume is consulted only for the zero-volume suspension flag, never for fill sizing. At most one rebalance per trading row means prior-day purchases are unlocked at the next open; daily T+1 has no distinct intraday branch. Data and time-limit termination is truncation with outstanding holdings marked, never forced liquidation.
 
 No changes to assigned core files are pending. Parent may review/integrate these files; no claim of profitable strategy performance is made.
+
+## Review round 1 fixes
+
+Reviewed and reproduced all three findings before implementation. Changes remain limited to the assigned core source/tests and this report.
+
+1. `validate_bars` now rejects duplicate normalized calendar dates. The same validation protects CSV import and direct environment construction, preventing multiple intraday rows from bypassing daily T+1. A single nonmidnight timestamp per day remains valid and unchanged.
+2. A full-allocation request now preserves existing integer shares and computes only additional whole lots from available cash. It never divides existing holdings through floating-point market value, so the `[.01, .01, .07]` opening-price path holds exactly `[0, 1000000, 1000000]` shares with one purchase and no unintended sale. Existing affordability, fees and participation restrictions still apply afterward.
+3. Annualization computes a log growth exponent and checks it against the maximum representable float before exponentiation. A one-period 20x NAV path returns `total_return=19`, `annualized_return=null`, undefined one-sample volatility/Sharpe as null, and no RuntimeWarning.
+
+Red command: `python -m pytest tests/test_data.py tests/test_environment.py tests/test_evaluation.py -q`
+
+Red output: **4 failed, 41 passed in 4.84s**. Failures reproduced same-day CSV/environment acceptance, the unintended million-share position sale, and exponential overflow with RuntimeWarning promoted to error. The separate valid nonmidnight daily fixture passed.
+
+Targeted verification after calendar-date fix: **3 passed in 0.81s**.
+Targeted verification after full-allocation fix, including fee accounting: **3 passed in 0.62s**.
+
+Final command: `C:/Users/111/Desktop/StockRLTrader/.venv/Scripts/python.exe -m pytest tests/test_data.py tests/test_environment.py tests/test_evaluation.py -q`
+
+Final output: **45 passed in 3.79s**, no warnings. Files frozen again for parent review; no commit made.

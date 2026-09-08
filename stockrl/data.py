@@ -23,6 +23,8 @@ def validate_bars(bars: pd.DataFrame) -> pd.DataFrame:
         raise ValueError('Date index must be a DatetimeIndex')
     if bars.index.hasnans or not bars.index.is_unique or not bars.index.is_monotonic_increasing:
         raise ValueError('Date values must be valid, unique and strictly increasing')
+    if not bars.index.normalize().is_unique:
+        raise ValueError('Daily OHLCV permits only one observation per calendar day')
     result = bars[COLUMNS].copy()
     try:
         result = result.apply(pd.to_numeric, errors='raise').astype(float)

@@ -67,3 +67,20 @@ def test_saved_market_prices_reload_bit_for_bit(tmp_path):
     path = tmp_path/'market.csv'
     frame.to_csv(path,float_format='%.17g')
     np.testing.assert_array_equal(load_csv(path).to_numpy(),frame.to_numpy())
+
+
+def test_csv_rejects_multiple_samples_on_same_calendar_day(tmp_path):
+    frame = make_demo_data(n=3)
+    frame.index = pd.date_range('2024-01-01 09:00',periods=3,freq='h',name='Date')
+    path = tmp_path/'intraday.csv'
+    frame.to_csv(path)
+    with pytest.raises(ValueError,match='calendar day|daily'):
+        load_csv(path)
+
+
+def test_csv_accepts_one_nonmidnight_sample_per_calendar_day(tmp_path):
+    frame = make_demo_data(n=3)
+    frame.index = pd.date_range('2024-01-01 15:00',periods=3,freq='D',name='Date')
+    path = tmp_path/'daily.csv'
+    frame.to_csv(path)
+    assert load_csv(path).index.equals(frame.index)
