@@ -34,3 +34,9 @@ The application rejects invalid or insufficient data rather than silently repair
 ## Research limits
 
 These short runs verify execution and reproducibility. They do not assess a policy's statistical significance, stability across market regimes, or suitability for real trading. Multi-asset allocation, walk-forward research, order-book matching, limit-order queues, corporate actions and broker execution require further work. T+1 follows from the daily one-rebalance schedule; this environment does not simulate intraday trading.
+
+## Local integration and review
+
+The verified branch was fast-forwarded into the original local `main` checkout. The complete suite passed there again: **63 passed in 19.43s**, without warnings. The root launcher and command-line help were also verified. No remote push was performed.
+
+Independent final review found no critical or important issues. One presentation-only improvement remains optional: progress currently restarts for each seed instead of showing cumulative multi-seed progress. Experiment outputs and completion are unaffected.
