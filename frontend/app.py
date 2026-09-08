@@ -46,6 +46,8 @@ st.markdown(
     .data-stamp { border-left:3px solid var(--aqua); background:var(--panel); padding:12px 16px; margin:8px 0 16px; }
     .demo-stamp { border-left-color:var(--amber); }
     .stButton>button,.stDownloadButton>button { min-height:44px; border-radius:5px; font-weight:600; }
+    .stButton>button[kind="primary"],.stButton>button[kind="primary"] p,
+    button[data-testid="stBaseButton-primary"],button[data-testid="stBaseButton-primary"] p { color:var(--ink)!important; }
     .stButton>button:focus-visible,.stDownloadButton>button:focus-visible { outline:3px solid var(--aqua); outline-offset:2px; }
     [data-baseweb="tab-list"] { gap:1.25rem; border-bottom:1px solid var(--rule); }
     [data-baseweb="tab"] { min-height:48px; }
@@ -148,6 +150,34 @@ def _saved_summaries() -> list[Path]:
     return sorted(OUTPUT_ROOT.rglob("summary.json"), key=lambda path: path.stat().st_mtime, reverse=True)
 
 
+def _load_saved_summary(path: Path) -> dict:
+    """Load an experiment and rebase artifacts to its current directory."""
+    summary = json.loads(path.read_text(encoding="utf-8"))
+    root = path.parent.resolve()
+    runs = summary.get("runs")
+    if not isinstance(runs, list) or not runs:
+        raise ValueError("summary.json 没有可显示的 seed 结果")
+    for run in runs:
+        seed_dir = root / f"seed_{int(run['seed'])}"
+        for key, name in (("history_path", "history.csv"), ("trades_path", "trades.csv"),
+                          ("model_path", "model.zip"), ("normalizer_path", "normalizer.json"),
+                          ("validation_path", "evaluations.npz")):
+            if key in run:
+                run[key] = str(seed_dir / name)
+        baselines = run.get("baselines", {})
+        if not isinstance(baselines, dict):
+            raise ValueError("summary.json 的基准结果格式无效")
+        for name, artifact in baselines.items():
+            if not isinstance(artifact, dict):
+                raise ValueError(f"summary.json 的 {name} 基准格式无效")
+            artifact_dir = seed_dir / "baselines" / name
+            artifact["history_path"] = str(artifact_dir / "history.csv")
+            artifact["trades_path"] = str(artifact_dir / "trades.csv")
+    summary["output_dir"] = str(root)
+    summary["data_path"] = str(root / "bars.csv")
+    return summary
+
+
 _init_state()
 
 with st.sidebar:
@@ -179,6 +209,7 @@ with data_tab:
                 st.session_state["bars"] = make_demo_data(int(demo_rows), int(demo_seed))
                 st.session_state["data_label"] = "synthetic_demo"
                 st.session_state["summary"] = None
+                st.rerun()
         elif source == "上传 CSV":
             uploaded = st.file_uploader("CSV 文件", type=["csv"], key="csv_upload",
                                         help="必须包含 Date、Open、High、Low、Close、Volume；文件只在内存中读取。")
@@ -191,6 +222,7 @@ with data_tab:
                         st.session_state["bars"] = load_csv(uploaded)
                         st.session_state["data_label"] = f"uploaded:{_clean_filename(uploaded.name)}"
                         st.session_state["summary"] = None
+                        st.rerun()
                     except ValueError as exc:
                         st.error(f"CSV 无法载入：{exc}")
         else:
@@ -202,6 +234,7 @@ with data_tab:
                         st.session_state["bars"] = load_csv(sample)
                         st.session_state["data_label"] = f"local:{sample.name}"
                         st.session_state["summary"] = None
+                        st.rerun()
                     except ValueError as exc:
                         st.error(f"本地文件无法载入：{exc}")
             else:
@@ -277,8 +310,8 @@ with results_tab:
                                 format_func=lambda path: str(path.parent.relative_to(OUTPUT_ROOT)), key="saved_summary")
         if st.button("载入已保存结果", key="load_saved"):
             try:
-                st.session_state["summary"] = json.loads(selected.read_text(encoding="utf-8"))
-            except (OSError, ValueError, KeyError) as exc:
+                st.session_state["summary"] = _load_saved_summary(selected)
+            except (OSError, ValueError, KeyError, TypeError) as exc:
                 st.error(f"结果无法载入：{exc}")
 
     summary = st.session_state["summary"]
@@ -287,21 +320,31 @@ with results_tab:
     else:
         if summary.get("data_label") == "synthetic_demo":
             st.warning("当前为合成演示数据。收益数字只验证流程，不代表任何市场表现。")
-        runs = summary.get("runs", [])
-        seed_options = [run["seed"] for run in runs]
-        selected_seed = st.selectbox("查看随机种子", seed_options, key="result_seed")
-        run = next(item for item in runs if item["seed"] == selected_seed)
-        metrics = run["metrics"]
-        metric_cols = st.columns(5)
-        for column, key in zip(metric_cols, ("total_return", "annualized_return", "sharpe", "max_drawdown", "total_cost")):
-            column.metric(METRICS[key], _metric_text(key, metrics.get(key)))
-        st.plotly_chart(_trajectory_chart(run), width="stretch", key=f"trajectory_{selected_seed}")
-        st.caption("净值和实际仓位使用同一时间轴；所有基准复用相同测试区间、费用和成交约束。")
-        st.dataframe(_comparison_frame(run), width="stretch")
-        csv_data = _history(run["history_path"]).to_csv(index=False).encode("utf-8-sig")
-        st.download_button("下载 RL 逐日记录", csv_data,
-                           file_name=f"{summary['run_id']}-seed-{selected_seed}-history.csv",
-                           mime="text/csv", key="download_history")
+        try:
+            runs = summary["runs"]
+            if not isinstance(runs, list) or not runs:
+                raise ValueError("没有可显示的 seed 结果")
+            seed_options = [run["seed"] for run in runs]
+            selected_seed = st.selectbox("查看随机种子", seed_options, key="result_seed")
+            run = next(item for item in runs if item["seed"] == selected_seed)
+            metrics = run["metrics"]
+            trajectory = _trajectory_chart(run)
+            comparison = _comparison_frame(run)
+            csv_data = _history(run["history_path"]).to_csv(index=False).encode("utf-8-sig")
+        except (OSError, ValueError, KeyError, TypeError, pd.errors.ParserError) as exc:
+            st.error(f"结果文件无法读取：{exc}。请恢复该实验的完整产物目录后重试。")
+        else:
+            first_row = st.columns(3)
+            second_row = st.columns(2)
+            cards = [*first_row, *second_row]
+            for column, key in zip(cards, ("total_return", "annualized_return", "sharpe", "max_drawdown", "total_cost")):
+                column.metric(METRICS[key], _metric_text(key, metrics.get(key)))
+            st.plotly_chart(trajectory, width="stretch", key=f"trajectory_{selected_seed}")
+            st.caption("净值和实际仓位使用同一时间轴；所有基准复用相同测试区间、费用和成交约束。")
+            st.dataframe(comparison, width="stretch")
+            st.download_button("下载 RL 逐日记录", csv_data,
+                               file_name=f"{summary['run_id']}-seed-{selected_seed}-history.csv",
+                               mime="text/csv", key="download_history")
 
 st.divider()
 st.markdown("本工具仅用于强化学习交易研究与软件验证，不连接券商，不构成投资建议。")

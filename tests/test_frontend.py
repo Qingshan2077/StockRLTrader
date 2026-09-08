@@ -1,6 +1,7 @@
 """Streamlit smoke tests use its real application runner and real PPO training."""
 
 from pathlib import Path
+import shutil
 
 import pandas as pd
 from streamlit.testing.v1 import AppTest
@@ -48,6 +49,7 @@ def test_uploaded_csv_ignores_unsafe_filename_and_loads_in_memory(tmp_path, monk
     assert not app.exception
     assert app.session_state["data_label"] == "uploaded:escaped.csv"
     assert len(app.session_state["bars"]) == 81
+    assert any("uploaded:escaped.csv" in caption.value for caption in app.sidebar.caption)
     assert not (tmp_path / "escaped.csv").exists()
 
 
@@ -65,3 +67,29 @@ def test_demo_can_train_real_ppo_and_show_saved_result(tmp_path, monkeypatch):
     assert Path(summary["runs"][0]["model_path"]).is_file()
     assert len(app.get("plotly_chart")) >= 1
     assert len(app.dataframe) >= 1
+
+
+def test_moved_saved_run_rebases_artifacts_and_missing_file_is_reported(tmp_path, monkeypatch):
+    from stockrl.data import make_demo_data
+    from stockrl.experiments import run_experiment
+
+    trained = run_experiment(
+        make_demo_data(81), tmp_path / "original", timesteps=4, seeds=(7,), episode_length=8,
+        data_label="synthetic_demo",
+    )
+    moved = tmp_path / "runs" / "moved-run"
+    moved.parent.mkdir()
+    shutil.move(trained["output_dir"], moved)
+    monkeypatch.setenv("STOCKRL_OUTPUT_DIR", str(moved.parent))
+
+    app = AppTest.from_file(str(APP)).run(timeout=30)
+    app.button(key="load_saved").click().run(timeout=30)
+
+    assert not app.exception
+    assert len(app.get("plotly_chart")) == 1
+    assert Path(app.session_state["summary"]["runs"][0]["history_path"]).parent == moved / "seed_7"
+
+    (moved / "seed_7" / "history.csv").unlink()
+    app.run(timeout=30)
+    assert not app.exception
+    assert any("结果文件" in error.value for error in app.error)

@@ -1,7 +1,7 @@
 # Task 3 product entry points report
 
-Date: 2026-09-08  
-Worktree: `C:\Users\111\Desktop\StockRLTrader\.worktrees\rl-core`  
+Date: 2026-09-08
+Worktree: `C:\Users\111\Desktop\StockRLTrader\.worktrees\rl-core`
 Scope owner: product entry points only; migration deletions were performed separately by the parent task.
 
 ## Delivered behavior
@@ -67,3 +67,21 @@ Additional checks completed:
 - `tests/test_frontend.py`
 
 No commit was created, as requested. The parent task owns final integration and any additional browser-verification notes.
+
+## Bounded dashboard fix round
+
+The final reviewer identified one important portability defect: loading a copied experiment folder in the dashboard reused absolute artifact paths from its original location. A real tiny experiment reproduced the resulting `FileNotFoundError` after the original folder was moved.
+
+The saved-result loader now reconstructs each seed and baseline artifact path from the selected `summary.json` parent. Live results returned by the current process remain unchanged. Chart, comparison-table, and download preparation now share guarded artifact loading; a missing or malformed file produces a visible recovery message instead of terminating the page.
+
+The same round corrected three browser findings: successful data loads immediately rerun so the sidebar reflects current state, primary aqua buttons use dark text, and five result metrics use a three-card plus two-card layout to prevent values from clipping at typical desktop widths.
+
+Regression cycle:
+
+```text
+python -m pytest tests/test_frontend.py -q
+# RED: 2 failed, 2 passed (stale sidebar and moved-run FileNotFoundError)
+# GREEN: 4 passed in 6.17s
+```
+
+The moved-folder regression creates and trains a real four-timestep PPO experiment, moves its complete run directory, removes the original location, loads the copied result through Streamlit, verifies the rebased chart/history path, then removes `history.csv` and verifies a visible page error without an uncaught exception.
