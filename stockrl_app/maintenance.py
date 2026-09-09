@@ -21,6 +21,8 @@ def main(argv: list[str] | None = None) -> int:
     commands.add_parser('init')
     commands.add_parser('check')
     commands.add_parser('import-legacy')
+    exposures = commands.add_parser('import-exposures')
+    exposures.add_argument('source', type=Path)
     backup = commands.add_parser('backup')
     backup.add_argument('destination', type=Path)
     migrate = commands.add_parser('migrate')
@@ -38,6 +40,9 @@ def main(argv: list[str] | None = None) -> int:
         records = LegacyImporter(settings, Database(settings.database_path)).scan()
         for record in records:
             print(f'{record.experiment_id} {record.integrity} replayable={record.replayable}')
+    elif options.command == 'import-exposures':
+        from .exposures import import_exposures
+        print(f'Imported exposure records: {import_exposures(Database(settings.database_path), options.source)}')
     else:
         with Database(settings.database_path).connection():
             pass

@@ -36,6 +36,8 @@ class ResultService:
 
     def detail(self, experiment_id: str) -> ExperimentDetail:
         record = self.experiments.get(experiment_id)
+        if record.kind == 'research':
+            raise AppError('RESEARCH_ROUTE_REQUIRED', '请使用研究页面读取此结果。', 409)
         # Report integrity is independent of the immutable historical job outcome.
         if record.integrity == 'complete':
             for artifact in self.artifacts.list(experiment_id):
@@ -52,6 +54,8 @@ class ResultService:
 
     def _csv(self, experiment_id: str, seed: int, policy: str, filename: str):
         experiment = self.experiments.get(experiment_id)
+        if experiment.kind == 'research':
+            raise AppError('RESEARCH_ROUTE_REQUIRED', '研究结果使用独立的指标与产物协议。', 409)
         if experiment.integrity != 'complete':
             raise AppError('RESULT_UNAVAILABLE', '此实验尚无完整可读取的结果。', 409)
         if type(seed) is not int or seed not in [run.get('seed') for run in experiment.runs]:

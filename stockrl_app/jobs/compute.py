@@ -124,6 +124,9 @@ def execute(settings: AppSettings, job_id: str, owner_token: str, control) -> No
     job = JobRepository(db).get(job_id)
     if job.owner_token != owner_token or job.status != 'running':
         raise AppError('STATE_CONFLICT', '任务执行权已失效。', 409)
+    if job.kind == 'research':
+        from ..research_compute import execute_research
+        return execute_research(settings, db, job, control)
     experiment = ExperimentRepository(db).get(job.experiment_id)
     stage = confined_path(settings.output_dir, f'.staging/{job_id}')
     stage.mkdir(parents=True, exist_ok=False)

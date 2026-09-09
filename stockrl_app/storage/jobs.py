@@ -1,4 +1,5 @@
 """Durable job state; ownership and revision checks are enforced under one write lock."""
+import builtins
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 import sqlite3
@@ -297,7 +298,7 @@ class JobRepository:
             return record
 
     def publish_success(self, job_id: str, *, owner_token: str, revision: int,
-                        experiment: ExperimentRecord, artifacts: list[ArtifactStorageRecord],
+                        experiment: ExperimentRecord, artifacts: builtins.list[ArtifactStorageRecord],
                         move: Callable[[], None]) -> JobRecord:
         """Caller verifies files/hashes before intent; callback performs only final rename (or recovery no-op)."""
         with self.db.transaction() as connection:

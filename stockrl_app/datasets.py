@@ -1,4 +1,5 @@
 """Immutable, validated daily bars. Input names never determine file paths."""
+import builtins
 from collections.abc import Iterable, Iterator
 import hashlib
 from io import BytesIO
@@ -63,7 +64,7 @@ class DatasetService:
         page = self.repository.list(limit=limit, cursor=cursor)
         return Page[Dataset](items=[row.public() for row in page.items], next_cursor=page.next_cursor, has_more=page.has_more)
 
-    def local_sources(self) -> list[LocalSource]:
+    def local_sources(self) -> builtins.list[LocalSource]:
         root = self.settings.local_source_dir
         if not root.is_dir():
             return []

@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from stockrl.env import TradingConfig
 
 JobStatus = Literal['queued', 'running', 'cancelling', 'succeeded', 'failed', 'cancelled', 'interrupted']
-JobKind = Literal['train', 'replay']
+JobKind = Literal['train', 'replay', 'research']
 Phase = Literal['preparing', 'training', 'validating', 'evaluating', 'publishing']
 Integrity = Literal['pending', 'complete', 'partial', 'corrupt', 'unsupported']
 Seed = Annotated[int, Field(ge=0, le=4294967295)]
@@ -337,7 +337,7 @@ class WorkerInstance(StrictModel):
 
 class Capabilities(StrictModel):
     api_version: int = 1
-    database_schema_version: int = 1
+    database_schema_version: int = 2
     artifact_schema_version: int = 1
     core_semantics_version: int = 1
     metrics_version: int = 1

@@ -24,6 +24,8 @@ LOG = logging.getLogger(__name__)
 
 def map_event(event: dict, job: JobRecord) -> dict:
     """Translate core observations, without changing research decisions or counting twice."""
+    if job.kind == 'research':
+        return {}  # Durable unit progress is indexed by the child under job ownership.
     name = event.get('event')
     if name == 'phase':
         return {'phase': event['phase'], **({'seed': event['seed']} if 'seed' in event else {})}
@@ -141,7 +143,7 @@ class Worker:
         def check_deadline():
             nonlocal last_state_check
             now = time.monotonic()
-            if now - start >= self.settings.task_time_limit_seconds:
+            if now - start >= self.task_limit(job):
                 raise AppError('TIME_LIMIT_EXCEEDED', '任务超过总时限，结果未发布。', 409)
             if self.stop_requested():
                 raise AppError('WORKER_STOPPING', '执行服务正在退出，结果未发布。', 409)
@@ -154,10 +156,17 @@ class Worker:
         thread = Thread(target=keep_alive, name='publishing-heartbeat', daemon=True)
         thread.start()
         try:
-            self.publisher.publish(job, check_deadline=check_deadline)
+            if job.kind == 'research':
+                from ..research_compute import ResearchPublisher
+                ResearchPublisher(self.settings, self.db).publish(job, check_deadline=check_deadline)
+            else:
+                self.publisher.publish(job, check_deadline=check_deadline)
         finally:
             finished.set()
             thread.join(self.settings.busy_timeout_ms / 1000 + 1)
+
+    def task_limit(self, job: JobRecord) -> int:
+        return self.settings.task_time_limit_seconds * (job.seed_count if job.kind == 'research' else 1)
 
     def run_job(self, initial: JobRecord) -> None:
         parent, child = self.context.Pipe(duplex=True)
@@ -176,7 +185,7 @@ class Worker:
             while True:
                 now = time.monotonic()
                 job = self.jobs.get(initial.job_id)
-                timed_out = timed_out or now - start >= self.settings.task_time_limit_seconds
+                timed_out = timed_out or now - start >= self.task_limit(job)
                 if (self.stop_requested() or timed_out) and job.status == 'running':
                     job = self.jobs.request_cancel(job.job_id)
                 if stopping_at is None and (timed_out or job.status == 'cancelling'):
@@ -184,9 +193,12 @@ class Worker:
                     self.send_cancel(parent)
                 # Drain bounded batches so a noisy child cannot starve cancellation/heartbeats.
                 for _ in range(100):
-                    if pipe_closed or not parent.poll():
+                    if pipe_closed:
                         break
                     try:
+                        # Windows can report peer closure from poll(), before recv().
+                        if not parent.poll():
+                            break
                         message = parent.recv()
                     except (EOFError, OSError):
                         pipe_closed = True
@@ -209,8 +221,12 @@ class Worker:
                 if not alive:
                     process.join()
                     # The last pipe message can become readable between the poll and process exit.
-                    if not pipe_closed and parent.poll():
-                        continue
+                    if not pipe_closed:
+                        try:
+                            if parent.poll():
+                                continue
+                        except (EOFError, OSError):
+                            pipe_closed = True
                     break
                 waiting = False
                 if stopping_at is not None:

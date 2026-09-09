@@ -28,8 +28,9 @@ class LocalRequestMiddleware:
         scope.setdefault("state", {})["request_id"] = identifier
         received = 0
         started = False
-        upload = scope["path"] == "/api/v1/datasets/csv"
-        limit = self.settings.upload_limit_bytes + 65536 if upload else 131072
+        market_upload = scope["path"] in {"/api/v1/market-datasets", "/api/v1/market-datasets/preview"}
+        upload = scope["path"] == "/api/v1/datasets/csv" or market_upload
+        limit = (100 * 1024 * 1024 + 65536) if market_upload else (self.settings.upload_limit_bytes + 65536 if upload else 131072)
 
         async def bounded_receive():
             nonlocal received

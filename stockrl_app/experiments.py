@@ -126,7 +126,10 @@ class ExperimentService:
                 directory.rmdir()
 
     def get(self, experiment_id: str) -> ExperimentDetail:
-        return self.repository.get(experiment_id).public()
+        record = self.repository.get(experiment_id)
+        if record.kind == 'research':
+            raise AppError('RESEARCH_ROUTE_REQUIRED', '请使用研究页面读取此结果。', 409)
+        return record.public()
 
     def list(self, *, limit: int = 20, cursor: str | None = None, kind: str | None = None,
              integrity: str | None = None, algorithm: str | None = None,

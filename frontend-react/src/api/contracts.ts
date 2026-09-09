@@ -3,7 +3,7 @@
 // Runtime OpenAPI parity remains a separate integration acceptance check.
 
 export type JobStatus = "queued" | "running" | "cancelling" | "succeeded" | "failed" | "cancelled" | "interrupted";
-export type JobKind = "train" | "replay";
+export type JobKind = "train" | "replay" | "research";
 export type Phase = "preparing" | "training" | "validating" | "evaluating" | "publishing";
 export type Integrity = "pending" | "complete" | "partial" | "corrupt" | "unsupported";
 export type Seed = number;

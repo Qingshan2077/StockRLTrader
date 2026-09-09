@@ -1,5 +1,7 @@
 """Publication crash/cancellation boundaries, without training or model deserialization."""
 import shutil
+import multiprocessing
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -10,6 +12,7 @@ from stockrl_app.datasets import DatasetService
 from stockrl_app.errors import AppError
 from stockrl_app.experiments import ExperimentService
 from stockrl_app.models import DemoDatasetRequest, ExperimentRequest
+from stockrl_app.jobs.worker import Worker
 from stockrl_app.settings import AppSettings
 from stockrl_app.storage.artifacts import ArtifactRepository
 from stockrl_app.storage.database import Database
@@ -60,6 +63,37 @@ def publication(tmp_path):
         (directory / 'trades.csv').write_text(trades, encoding='utf-8')
     seal_bundle(stage, job=job, experiment=experiment, metadata={'seeds': [42]})
     return settings, db, jobs, job, stage
+
+
+def _close_compute_pipe(connection, completed):
+    if completed:
+        connection.send({'type': 'done'})
+    connection.close()
+
+
+@pytest.mark.parametrize('completed', [True, False])
+def test_worker_survives_compute_pipe_closure(publication, completed):
+    settings, db, jobs, job, stage = publication
+    worker = Worker(settings)
+    worker.owner = job.owner_token
+    context = multiprocessing.get_context('spawn')
+    # Use a real OS pipe and child, but the prepared bundle needs no training.
+    worker.context = SimpleNamespace(
+        Pipe=context.Pipe,
+        Process=lambda **kwargs: context.Process(
+            target=_close_compute_pipe, args=(kwargs['args'][-1], completed)),
+    )
+    worker.run_job(job)
+    result = jobs.get(job.job_id)
+    assert result.status == ('succeeded' if completed else 'failed')
+    if completed:
+        assert (settings.output_dir / job.experiment_id / 'manifest.json').is_file()
+        assert not stage.exists()
+    else:
+        assert result.error.code == 'COMPUTE_INTERRUPTED'
+        assert stage.exists()
+    worker.heartbeat(force=True)
+    assert jobs.worker_available()
 
 
 def test_cancel_committing_before_publication_keeps_staging_unpublished(publication):

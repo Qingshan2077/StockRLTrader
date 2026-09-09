@@ -6,12 +6,22 @@ from pathlib import Path, PureWindowsPath
 from .errors import AppError
 
 
+def resolved_local(path: Path, *, strict: bool = False) -> Path:
+    resolved = path.resolve(strict=strict)
+    # Windows may return an extended-length spelling during concurrent creation.
+    # Normalize that spelling after resolution, while retaining junction targets.
+    if os.name == 'nt' and str(resolved).startswith('\\\\?\\'):
+        value = str(resolved)[4:]
+        resolved = Path('\\\\' + value[4:] if value.startswith('UNC\\') else value)
+    return resolved
+
+
 def local_root(value: str | Path, base: Path) -> Path:
     raw = str(value)
     if raw.startswith(('\\\\', '//')) or PureWindowsPath(raw).drive.startswith('\\\\'):
         raise AppError('NETWORK_ROOT_UNSUPPORTED', '应用存储必须位于本机磁盘。', 422)
     path = Path(value).expanduser()
-    resolved = (path if path.is_absolute() else base / path).resolve()
+    resolved = resolved_local(path if path.is_absolute() else base / path)
     if str(resolved).startswith(('\\\\', '//')):
         raise AppError('NETWORK_ROOT_UNSUPPORTED', '应用存储必须位于本机磁盘。', 422)
     if os.name == 'nt':
@@ -26,12 +36,12 @@ def confined_path(root: Path, relative: str | Path, *, must_exist: bool = False)
     value = str(relative)
     candidate = Path(relative)
     anchored_root = Path(os.path.abspath(root))
-    if anchored_root.resolve() != anchored_root:
+    if resolved_local(anchored_root) != anchored_root:
         raise AppError('ROOT_CHANGED', '应用目录的实际位置已变更，请重新启动并检查配置。', 409)
     if candidate.is_absolute() or PureWindowsPath(value).is_absolute() or PureWindowsPath(value).drive:
         raise AppError('PATH_OUTSIDE_ROOT', '文件路径不在允许的目录内。', 409)
     try:
-        resolved = (anchored_root / candidate).resolve(strict=must_exist)
+        resolved = resolved_local(anchored_root / candidate, strict=must_exist)
         resolved.relative_to(anchored_root)
         if resolved == anchored_root:
             raise ValueError('root is not a file')
@@ -45,6 +55,7 @@ class AppSettings:
     project_root: Path = Path(__file__).resolve().parents[1]
     app_dir: Path | str | None = None
     output_dir: Path | str | None = None
+    research_dir: Path | str | None = None
     local_source_dir: Path | str | None = None
     frontend_dir: Path | str | None = None
     upload_limit_bytes: int = 20 * 1024 * 1024
@@ -65,7 +76,7 @@ class AppSettings:
         root = local_root(self.project_root, Path.cwd())
         object.__setattr__(self, 'project_root', root)
         for name, default in (('app_dir', 'outputs/app'), ('output_dir', 'outputs/experiments'),
-                              ('local_source_dir', 'stock_data'), ('frontend_dir', 'api/static')):
+                              ('research_dir', 'outputs/researches'), ('local_source_dir', 'stock_data'), ('frontend_dir', 'api/static')):
             object.__setattr__(self, name, local_root(getattr(self, name) or default, root))
         for name in ('upload_limit_bytes', 'max_dataset_rows', 'queue_capacity', 'busy_timeout_ms',
                      'heartbeat_interval_seconds', 'worker_unavailable_seconds', 'cancellation_grace_seconds',
@@ -85,7 +96,8 @@ class AppSettings:
         values: dict[str, object] = {}
         if project_root is not None:
             values['project_root'] = project_root
-        for field, variable in (('app_dir', 'STOCKRL_APP_DIR'), ('output_dir', 'STOCKRL_OUTPUT_DIR')):
+        for field, variable in (('app_dir', 'STOCKRL_APP_DIR'), ('output_dir', 'STOCKRL_OUTPUT_DIR'),
+                                ('research_dir', 'STOCKRL_RESEARCH_DIR')):
             if os.environ.get(variable):
                 values[field] = os.environ[variable]
         if os.environ.get('STOCKRL_HOST'):
@@ -108,3 +120,7 @@ class AppSettings:
     @property
     def staging_dir(self) -> Path:
         return confined_path(self.output_dir, '.staging')
+
+    @property
+    def research_staging_dir(self) -> Path:
+        return confined_path(self.research_dir, '.staging')

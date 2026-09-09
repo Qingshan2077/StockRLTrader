@@ -11,7 +11,7 @@ python -m stockrl_app.maintenance backup outputs/backups/state-before-change.sql
 python -m stockrl_app.maintenance import-legacy
 ```
 
-`init` 仅创建新应用 schema 或接受已知当前 schema；未知版本拒绝写入。`backup` 使用 SQLite 一致性备份接口包含已提交 WAL 内容，目标文件必须不存在。升级入口是 `migrate <新备份路径>`，目前只接受已有当前版本，没有实现任意版本降级或虚构迁移。
+`init` 仅创建 schema 2 或接受已知当前 schema；已有 schema 1 必须停止全部写入进程后执行 `migrate <新备份路径>`。迁移先做包含 WAL 的一致性备份，再事务升级；失败回滚并保留备份。目标备份不得已存在，不支持任意版本降级。研究单元、显式续跑及暴露记录的操作见 [研究 v2](research-v2.md)。
 
 完整备份还需保留 `outputs/app/` 中的快照、配置和 `outputs/experiments/` 产物。停止 worker 并确认计算子进程结束后，再复制目录及生成数据库备份，使文件与索引处于稳定状态。不要直接复制一个正在写入的 SQLite 主文件并丢弃 WAL。
 

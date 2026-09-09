@@ -1,5 +1,7 @@
 # 项目协作文档
 
+研究 v2 已增加数据核算、滚动评估和基础诊断。当前操作见 [研究使用说明](operations/research-v2.md)，验证与限制见 [2026-09-09 交付验证](reviews/2026-09-09-research-v2-verification.md)。下文保留此前 React + FastAPI 重构的协作记录。
+
 ## 当前实施：React + FastAPI 整体重构
 
 日期：2026-09-08。设计基线：`main` 的 `a66ea1bc6f1cf7a8c5512dc0454634b33304a0ab`。文档分支：`docs/react-fastapi-refactor`。

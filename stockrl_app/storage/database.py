@@ -5,9 +5,15 @@ from typing import Iterator
 
 from ..errors import AppError
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 REQUIRED_TABLES = frozenset({'schema_migrations', 'datasets', 'experiments', 'jobs', 'job_events',
-                             'artifacts', 'idempotency_keys', 'worker_instances'})
+                             'artifacts', 'idempotency_keys', 'worker_instances', 'market_datasets_v2',
+                             'researches', 'research_units', 'research_attempts', 'exposure_records',
+                             'artifact_protocol_registry'})
+
+
+def migration_lock_path(path: Path) -> Path:
+    return path.with_name(path.name + '.migration.lock')
 
 
 def check_schema(connection: sqlite3.Connection) -> None:
@@ -27,6 +33,8 @@ class Database:
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:
+        if migration_lock_path(self.path).exists():
+            raise AppError('MIGRATION_BUSY', '存储正在离线维护，请稍后重试。', 503)
         if self.path.resolve() != self.path:
             raise AppError('DATABASE_PATH_CHANGED', '应用数据库的实际位置已变更，请检查配置。', 503)
         if not self.path.is_file():

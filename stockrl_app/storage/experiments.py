@@ -43,9 +43,12 @@ class ExperimentRepository:
              dataset_id: str | None = None, status: str | None = None) -> Page[ExperimentRecord]:
         filters = {name: value for name, value in {'kind': kind, 'integrity': integrity, 'algorithm': algorithm,
                    'dataset_id': dataset_id, 'status': status}.items() if value is not None}
+        if kind is None:
+            filters['visible_v1'] = 'yes'
         with self.db.connection() as connection:
             return page_rows(connection, 'experiments', 'experiment_id', ExperimentRecord,
                              limit=limit, cursor=cursor, filters=filters, filter_columns={
+                                 'visible_v1': "CASE WHEN kind IN ('train','replay') THEN 'yes' ELSE 'no' END",
                                  'algorithm': "coalesce(json_extract(payload_json,'$.request.algorithm'),json_extract(payload_json,'$.legacy_config.algorithm'))",
                                  'status': '(SELECT status FROM jobs WHERE jobs.job_id=experiments.job_id)'})
 

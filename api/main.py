@@ -9,6 +9,7 @@ from stockrl_app.storage.database import Database
 
 from .errors import install_error_handlers
 from .routes import router
+from .research_routes import router as research_router
 from .security import LocalRequestMiddleware
 
 
@@ -20,6 +21,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
     app.state.database = Database(settings.database_path, busy_timeout_ms=settings.busy_timeout_ms)
     install_error_handlers(app)
     app.include_router(router)
+    app.include_router(research_router)
     app.add_middleware(CORSMiddleware, allow_origins=list(settings.allowed_origins),
                        allow_methods=['GET', 'POST'], allow_headers=['Content-Type', 'Idempotency-Key', 'X-Request-Id'],
                        expose_headers=['X-Request-Id'], allow_credentials=False)

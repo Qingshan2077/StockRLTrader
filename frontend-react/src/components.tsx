@@ -206,12 +206,12 @@ export function JobProgress({ job }: { job: JobDetail }) {
           </dd>
         </div>
         <div>
-          <dt>已完成 seed</dt>
+          <dt>{job.kind === "research" ? "已完成研究单元" : "已完成 seed"}</dt>
           <dd>
             {job.completed_seeds} / {job.seed_count}
           </dd>
         </div>
-        {job.kind === "train" && (
+        {(job.kind === "train" || job.kind === "research") && (
           <div>
             <dt>实际 / 计划训练步数</dt>
             <dd>

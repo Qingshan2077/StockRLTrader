@@ -15,6 +15,10 @@ import { ErrorBoundary, Loading } from "./components";
 import "./styles.css";
 
 const Datasets = lazy(() => import("./pages/Datasets"));
+const MarketDatasets = lazy(() => import("./pages/MarketDatasets"));
+const Researches = lazy(() => import("./pages/Researches"));
+const NewResearch = lazy(() => import("./pages/NewResearch"));
+const ResearchDetail = lazy(() => import("./pages/ResearchDetail"));
 const NewExperiment = lazy(() => import("./pages/NewExperiment"));
 const Jobs = lazy(() =>
   import("./pages/Jobs").then((module) => ({ default: module.Jobs })),
@@ -65,6 +69,9 @@ function Layout() {
           <small>交易研究台</small>
         </Link>
         <nav aria-label="主导航">
+          <NavLink to="/researches">
+            研究<span>Protocol</span>
+          </NavLink>
           <NavLink to="/datasets">
             数据集<span>Data</span>
           </NavLink>
@@ -120,6 +127,13 @@ createRoot(document.getElementById("root")!).render(
             <Route element={<Layout />}>
               <Route index element={<Navigate replace to="/experiments" />} />
               <Route path="datasets" element={<Datasets />} />
+              <Route path="market-datasets" element={<MarketDatasets />} />
+              <Route path="researches" element={<Researches />} />
+              <Route path="researches/new" element={<NewResearch />} />
+              <Route
+                path="researches/:researchId"
+                element={<ResearchDetail />}
+              />
               <Route path="experiments/new" element={<NewExperiment />} />
               <Route path="jobs" element={<Jobs />} />
               <Route path="jobs/:jobId" element={<JobDetail />} />

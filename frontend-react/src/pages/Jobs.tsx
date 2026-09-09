@@ -79,6 +79,7 @@ export function Jobs() {
             <option value="">全部类型</option>
             <option value="train">训练</option>
             <option value="replay">重放</option>
+            <option value="research">研究</option>
           </select>
         </label>
       </div>
@@ -96,7 +97,7 @@ export function Jobs() {
                 <th>类型</th>
                 <th>状态</th>
                 <th>当前阶段</th>
-                <th>完成 seed</th>
+                <th>完成单元 / seed</th>
                 <th>创建时间</th>
               </tr>
             </thead>
@@ -104,11 +105,24 @@ export function Jobs() {
               {query.data.items.map((job) => (
                 <tr key={job.job_id}>
                   <td>
-                    <Link className="mono" to={`/jobs/${job.job_id}`}>
+                    <Link
+                      className="mono"
+                      to={
+                        job.kind === "research"
+                          ? `/researches/${job.experiment_id}`
+                          : `/jobs/${job.job_id}`
+                      }
+                    >
                       {job.job_id.slice(0, 8)}
                     </Link>
                   </td>
-                  <td>{job.kind === "train" ? "训练" : "重放"}</td>
+                  <td>
+                    {job.kind === "research"
+                      ? "研究"
+                      : job.kind === "train"
+                        ? "训练"
+                        : "重放"}
+                  </td>
                   <td>
                     <JobBadge job={job} />
                     {!job.worker_available && !terminal(job.status) && (
@@ -270,9 +284,13 @@ export function JobDetail() {
           <div className="actions">
             <Link
               className="button secondary"
-              to={`/experiments/${query.data.experiment_id}`}
+              to={
+                query.data.kind === "research"
+                  ? `/researches/${query.data.experiment_id}`
+                  : `/experiments/${query.data.experiment_id}`
+              }
             >
-              查看实验
+              {query.data.kind === "research" ? "查看研究" : "查看实验"}
             </Link>
             <button
               className="danger"

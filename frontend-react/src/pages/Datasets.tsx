@@ -108,6 +108,7 @@ export default function Datasets() {
     <>
       <PageTitle eyebrow="DATA / 数据快照" title="数据集">
         <p className="hint">导入后保存独立快照，实验使用明确的数据指纹。</p>
+        <Link to="/market-datasets">登记研究所需的市场数据与规则</Link>
       </PageTitle>
       <div className="two-column">
         <section className="panel">

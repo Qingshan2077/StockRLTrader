@@ -10,6 +10,7 @@ from starlette.exceptions import HTTPException
 from starlette.responses import JSONResponse
 
 from stockrl_app.errors import AppError
+from stockrl.research.contracts import ResearchError
 
 logger = logging.getLogger("stockrl.api")
 
@@ -19,6 +20,11 @@ def request_id(request: Request) -> str:
 
 
 def install_error_handlers(app: FastAPI) -> None:
+    @app.exception_handler(ResearchError)
+    async def research_error(request: Request, exc: ResearchError):
+        failure = AppError(exc.code, str(exc), 422)
+        return JSONResponse(failure.response(request_id(request)), status_code=422)
+
     @app.exception_handler(AppError)
     async def application_error(request: Request, exc: AppError):
         return JSONResponse(exc.response(request_id(request)), status_code=exc.status_code)
