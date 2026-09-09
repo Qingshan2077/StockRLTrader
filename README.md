@@ -27,6 +27,9 @@ python -m venv .venv
 npm --prefix frontend-react install --ignore-scripts
 npm --prefix frontend-react run build
 .venv\Scripts\python.exe run.py
+或者：
+python -m uvicorn api.main:create_app --factory --host 127.0.0.1 --port 8081
+npm --prefix frontend-react run dev
 ```
 
 默认地址为 `http://127.0.0.1:8000`。`run.py` 检查前端构建并启动 API 和独立 worker；缺少构建会给出说明，绝不自动安装或构建。关闭浏览器不会取消任务；退出启动器会请求停止正在执行的任务。默认单机单用户，一个训练/重放任务执行，其余排队，不连接券商。

@@ -27,6 +27,14 @@ npm --prefix frontend-react run dev
 
 上述三个常驻服务分别运行；Vite 将 `/api` 代理到本地 8000 端口。API 不隐式初始化数据库、启动 worker 或载入 Torch/SB3。独立 worker 才负责计算。通过 `run.py` 启动时，启动器显式初始化新应用存储，并管理它自己启动的子进程。
 
+如果后端使用其他端口（例如旧工程占用 8000，新工程使用 8081），在当前工作树的 `frontend-react/.env` 中设置：
+
+```dotenv
+STOCKRL_API_TARGET=http://127.0.0.1:8081
+```
+
+该文件已被 Git 忽略；未设置时仍使用 8000。修改后重启 Vite 开发服务。代理地址必须指向当前工作树启动的本机 HTTP 后端，否则新页面可能连接到缺少研究接口的旧服务并显示“资源不存在”。可访问 `http://127.0.0.1:5173/api/v1/researches` 检查代理是否返回研究列表。
+
 `STOCKRL_APP_DIR` 默认 `outputs/app/`，`STOCKRL_OUTPUT_DIR` 默认 `outputs/experiments/`。这两个目录必须位于本机磁盘。`STOCKRL_HOST`、`STOCKRL_PORT` 可供分进程方式设置本地监听配置；直接使用 uvicorn 时绑定地址/端口仍需与配置一致。配置只在启动时读取，HTTP 请求不能修改存储目录。
 
 ## 检查与契约
